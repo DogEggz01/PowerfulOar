@@ -11,4 +11,8 @@
 - Big Oar and BFO 5000 cannot be hanged even with HookHangMore mod, but can be hammered.
 - Add reverse paddling (Press Q), so you can paddle forward while looking forward.
 
+## Compatibility
+- Radrefinement food/water slider: Will use this mod's value as base. you can reduce it furthur with slider.
+- Row continually: Still apply this mod's force and speed limit value.
+
 Prefeb used: 169, 666
