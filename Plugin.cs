@@ -15,7 +15,7 @@ namespace PracticalOar
     {
         public const string PluginGuid = "DogEggz.PracticalOar";
         public const string PluginName = "Practical Oar";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "0.1.0";
 
         internal const float DefaultMaxBoatSpeed = 2.06f;
         internal const int DefaultRowForce = 34000;
@@ -143,6 +143,177 @@ namespace PracticalOar
 
             GUILayout.Label($"{snapped:N0} ({snapped / (float)DefaultRowForce:0.00}x)");
             GUILayout.EndHorizontal();
+        }
+    }
+
+    internal static class BigOarFactory
+    {
+        internal const int VanillaOarPrefabIndex = 168;
+        internal const int BigOarPrefabIndex = 823;
+        internal const string BigOarName = "Big Oar";
+        internal const float BigOarScale = 2f;
+        internal const float BigOarWaterPosDistance = 1.5f;
+        internal const float BigOarWaterPosHeight = 2.8f;
+        internal const float BigOarRowDipHeight = 1f;
+
+        internal static GameObject BigOarPrefab { get; private set; }
+
+        internal static bool EnsureRegistered(PrefabsDirectory prefabs)
+        {
+            if (prefabs == null || prefabs.directory == null)
+            {
+                PracticalOarPlugin.LogSource?.LogError(
+                    "Could not register Big Oar: PrefabsDirectory is unavailable.");
+                return false;
+            }
+
+            if (prefabs.directory.Length > BigOarPrefabIndex &&
+                prefabs.directory[BigOarPrefabIndex] != null)
+            {
+                GameObject occupied = prefabs.directory[BigOarPrefabIndex];
+                if (occupied == BigOarPrefab ||
+                    occupied.GetComponent<BigOarScaleController>() != null)
+                {
+                    BigOarPrefab = occupied;
+                    return true;
+                }
+
+                PracticalOarPlugin.LogSource?.LogError(
+                    $"Could not register Big Oar: prefab index {BigOarPrefabIndex} " +
+                    $"is already occupied by '{occupied.name}'.");
+                return false;
+            }
+
+            if (BigOarPrefab != null)
+            {
+                EnsureDirectoryCapacity(prefabs);
+                prefabs.directory[BigOarPrefabIndex] = BigOarPrefab;
+                return true;
+            }
+
+            if (prefabs.directory.Length <= VanillaOarPrefabIndex ||
+                prefabs.directory[VanillaOarPrefabIndex] == null)
+            {
+                PracticalOarPlugin.LogSource?.LogError(
+                    $"Could not register Big Oar: vanilla oar prefab " +
+                    $"{VanillaOarPrefabIndex} was not found.");
+                return false;
+            }
+
+            GameObject clone = null;
+            try
+            {
+                clone = UnityEngine.Object.Instantiate(
+                    prefabs.directory[VanillaOarPrefabIndex]);
+
+                SaveablePrefab saveable = clone.GetComponent<SaveablePrefab>();
+                ShipItemOar oar = clone.GetComponent<ShipItemOar>();
+                if (saveable == null || oar == null)
+                {
+                    PracticalOarPlugin.LogSource?.LogError(
+                        "Could not register Big Oar: the cloned vanilla prefab " +
+                        "is missing SaveablePrefab or ShipItemOar.");
+                    UnityEngine.Object.Destroy(clone);
+                    return false;
+                }
+
+                clone.name = BigOarName;
+                clone.transform.localScale = Vector3.one * BigOarScale;
+                UnityEngine.Object.DontDestroyOnLoad(clone);
+
+                saveable.prefabIndex = BigOarPrefabIndex;
+                ((ShipItem)oar).name = BigOarName;
+                oar.waterPosDistance = BigOarWaterPosDistance;
+                oar.waterPosHeight = BigOarWaterPosHeight;
+                oar.rowDipHeight = BigOarRowDipHeight;
+
+                if (clone.GetComponent<BigOarScaleController>() == null)
+                    clone.AddComponent<BigOarScaleController>();
+
+                EnsureDirectoryCapacity(prefabs);
+
+                prefabs.directory[BigOarPrefabIndex] = clone;
+                BigOarPrefab = clone;
+
+                PracticalOarPlugin.LogSource?.LogInfo(
+                    $"Registered {BigOarName} at prefab index " +
+                    $"{BigOarPrefabIndex}. Scale={BigOarScale:0.0}x, " +
+                    $"water distance={BigOarWaterPosDistance:0.00}, " +
+                    $"water height={BigOarWaterPosHeight:0.00}, " +
+                    $"dip={BigOarRowDipHeight:0.00}.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                if (clone != null)
+                    UnityEngine.Object.Destroy(clone);
+
+                PracticalOarPlugin.LogSource?.LogError(
+                    $"Could not register Big Oar: {exception}");
+                return false;
+            }
+        }
+
+        private static void EnsureDirectoryCapacity(PrefabsDirectory prefabs)
+        {
+            if (prefabs.directory.Length <= BigOarPrefabIndex)
+            {
+                Array.Resize(
+                    ref prefabs.directory,
+                    BigOarPrefabIndex + 1);
+            }
+        }
+    }
+
+    [DefaultExecutionOrder(10000)]
+    internal sealed class BigOarScaleController : MonoBehaviour
+    {
+        private static readonly Vector3 WorldScale =
+            Vector3.one * BigOarFactory.BigOarScale;
+
+        private ShipItem item;
+        private ItemRigidbody itemRigidbody;
+
+        private void Awake()
+        {
+            item = GetComponent<ShipItem>();
+        }
+
+        private void LateUpdate()
+        {
+            if (item == null)
+                return;
+
+            if (itemRigidbody == null)
+                itemRigidbody = item.itemRigidbodyC;
+
+            if (itemRigidbody != null &&
+                itemRigidbody.GetCurrentInventorySlot() != null)
+            {
+                return;
+            }
+
+            ApplyScale(transform);
+
+            if (itemRigidbody != null)
+                ApplyScale(itemRigidbody.transform);
+        }
+
+        private static void ApplyScale(Transform target)
+        {
+            if (target.localScale != WorldScale)
+                target.localScale = WorldScale;
+        }
+    }
+
+    [HarmonyPatch(typeof(PrefabsDirectory), "Start")]
+    internal static class BigOarPrefabRegistrationPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.Last)]
+        private static void Prefix(PrefabsDirectory __instance)
+        {
+            BigOarFactory.EnsureRegistered(__instance);
         }
     }
 
