@@ -25,7 +25,7 @@ namespace PowerfulOar
     {
         public const string PluginGuid = "DogEggz.PowerfulOar";
         public const string PluginName = "PowerfulOar";
-        public const string PluginVersion = "1.0.1";
+        public const string PluginVersion = "1.0.2";
 
         internal const string GoPointerInputLoopMethod = "LateUpdate";
 
@@ -85,7 +85,6 @@ namespace PowerfulOar
                 $"{PluginName} {PluginVersion} loaded. " +
                 "Fixed per-oar stats and needs costs enabled. Hold Q to row opposite vanilla. " +
                 "Bone Island BFO placement and upright Big Oar vendor displays enabled. " +
-                "Press F7 while aiming at Bone Island to capture replacement coordinates. " +
                 $"Patches: stats={statsPatched}, late update={lateUpdatePatched}, " +
                 $"prefab={prefabPatched}, outline wake fix={outlinePatched}, " +
                 $"reverse input={reverseInputPatched}, nailing={nailingPatched}, " +
@@ -93,11 +92,6 @@ namespace PowerfulOar
                 $"HookHangMore exclusion={hookCompatibilityPatched}, " +
                 $"RadRefinement needs={RadRefinementCompatibility.NeedsReductionEnabled}, " +
                 $"continual row={RadRefinementCompatibility.ContinualRowAvailable}.");
-        }
-
-        private void Update()
-        {
-            BoneIslandPlacementCapture.CheckForCapture();
         }
 
         private bool ApplyPatchClass(
@@ -1514,7 +1508,7 @@ namespace PowerfulOar
             Vector3 surfacePoint = scenery.TransformPoint(LocalSurfacePosition);
             Vector3 worldNormal =
                 scenery.TransformDirection(LocalSurfaceNormal).normalized;
-            Quaternion capturedSurfaceFrame =
+            Quaternion recordedSurfaceFrame =
                 scenery.rotation * Quaternion.Euler(LocalSurfaceEuler);
             Transform hand = scenery.Find(HandObjectName);
 
@@ -1525,14 +1519,14 @@ namespace PowerfulOar
             // opening instead of pushing the entire collider outside the palm.
             Vector3 fingerDirection = hand != null
                 ? hand.up.normalized
-                : (capturedSurfaceFrame * Vector3.forward).normalized;
+                : (recordedSurfaceFrame * Vector3.forward).normalized;
             Vector3 thinAxis =
                 Vector3.ProjectOnPlane(worldNormal, fingerDirection).normalized;
             if (thinAxis.sqrMagnitude < 0.0001f)
             {
                 thinAxis = hand != null
                     ? hand.forward.normalized
-                    : (capturedSurfaceFrame * Vector3.up).normalized;
+                    : (recordedSurfaceFrame * Vector3.up).normalized;
             }
 
             Quaternion worldRotation =
@@ -1646,250 +1640,6 @@ namespace PowerfulOar
             enabled = false;
             PowerfulOarPlugin.LogSource?.LogInfo(
                 "Released the Bone Island BFO 5000 to normal held-item physics and saving.");
-        }
-    }
-
-    internal static class BoneIslandPlacementCapture
-    {
-        private const string BoneIslandSceneName = "island 36 ()";
-        private const float CaptureDistance = 500f;
-
-        internal static void CheckForCapture()
-        {
-            if (!GameState.playing || GameState.inCursorMenu ||
-                GameState.wasInSettingsMenu || !Input.GetKeyDown(KeyCode.F7))
-            {
-                return;
-            }
-
-            Camera camera = Camera.main;
-            if (camera == null)
-            {
-                ShowNotification("BFO capture: camera unavailable.");
-                return;
-            }
-
-            Scene scene = SceneManager.GetSceneByName(BoneIslandSceneName);
-            if (!scene.IsValid() || !scene.isLoaded)
-            {
-                ShowNotification("BFO capture: Bone Island is not loaded.");
-                PowerfulOarPlugin.LogSource?.LogWarning(
-                    $"F7 ground capture requires loaded scene '{BoneIslandSceneName}'.");
-                return;
-            }
-
-            Transform scenery = FindSceneryRoot(scene);
-            if (scenery == null)
-            {
-                ShowNotification("BFO capture: _scenery root not found.");
-                PowerfulOarPlugin.LogSource?.LogError(
-                    $"Could not capture BFO placement in {scene.name}: _scenery root missing.");
-                return;
-            }
-
-            RaycastHit hit;
-            int ignoredHits;
-            int visualCandidates;
-            int temporaryColliders;
-            if (!TryFindSceneryHit(
-                    camera,
-                    scenery,
-                    out hit,
-                    out ignoredHits,
-                    out visualCandidates,
-                    out temporaryColliders))
-            {
-                ShowNotification("BFO capture: aim at Bone Island ground.");
-                PowerfulOarPlugin.LogSource?.LogWarning(
-                    $"F7 ground capture found no Bone Island scenery hit; " +
-                    $"ignored {ignoredHits} intervening world hit(s), " +
-                    $"tested {visualCandidates} collider-less visual candidate(s), " +
-                    $"and created {temporaryColliders} temporary capture collider(s).");
-                return;
-            }
-
-            Vector3 facing = Vector3.ProjectOnPlane(camera.transform.forward, hit.normal);
-            if (facing.sqrMagnitude < 0.0001f)
-            {
-                facing = Vector3.ProjectOnPlane(camera.transform.up, hit.normal);
-            }
-
-            Quaternion worldRotation = Quaternion.LookRotation(facing.normalized, hit.normal);
-            Vector3 localPosition = scenery.InverseTransformPoint(hit.point);
-            Quaternion localRotation = Quaternion.Inverse(scenery.rotation) * worldRotation;
-            Vector3 localEuler = localRotation.eulerAngles;
-            Vector3 localNormal = scenery.InverseTransformDirection(hit.normal).normalized;
-
-            PowerfulOarPlugin.LogSource?.LogInfo(
-                "BFO 5000 Bone Island placement capture: " +
-                $"localPosition={FormatVector(localPosition)}, " +
-                $"localEuler={FormatVector(localEuler)}, " +
-                $"localSurfaceNormal={FormatVector(localNormal)}, " +
-                $"hitObject='{hit.collider.gameObject.name}', " +
-                $"ignoredWorldHits={ignoredHits}, " +
-                $"visualCandidates={visualCandidates}, " +
-                $"temporaryCaptureColliders={temporaryColliders}.");
-            ShowNotification("BFO ground captured. Check BepInEx log.");
-        }
-
-        private static bool TryFindSceneryHit(
-            Camera camera,
-            Transform scenery,
-            out RaycastHit selectedHit,
-            out int ignoredHits,
-            out int visualCandidates,
-            out int temporaryColliderCount)
-        {
-            selectedHit = default;
-            ignoredHits = 0;
-            visualCandidates = 0;
-            temporaryColliderCount = 0;
-            float nearestDistance = float.PositiveInfinity;
-            Ray ray = new Ray(camera.transform.position, camera.transform.forward);
-            List<MeshCollider> temporaryColliders =
-                AddTemporaryVisualColliders(ray, scenery, out visualCandidates);
-            temporaryColliderCount = temporaryColliders.Count;
-
-            try
-            {
-                if (temporaryColliders.Count > 0)
-                {
-                    Physics.SyncTransforms();
-                }
-
-                RaycastHit[] hits = Physics.RaycastAll(
-                    ray,
-                    CaptureDistance,
-                    Physics.DefaultRaycastLayers,
-                    QueryTriggerInteraction.Ignore);
-
-                foreach (RaycastHit candidate in hits)
-                {
-                    Collider collider = candidate.collider;
-                    Transform target = collider != null ? collider.transform : null;
-                    bool belongsToScenery = target != null &&
-                        (target == scenery || target.IsChildOf(scenery));
-                    if (!belongsToScenery)
-                    {
-                        ignoredHits++;
-                        continue;
-                    }
-
-                    if (candidate.distance < nearestDistance)
-                    {
-                        nearestDistance = candidate.distance;
-                        selectedHit = candidate;
-                    }
-                }
-            }
-            finally
-            {
-                foreach (MeshCollider temporaryCollider in temporaryColliders)
-                {
-                    if (temporaryCollider == null)
-                    {
-                        continue;
-                    }
-
-                    temporaryCollider.enabled = false;
-                    UnityEngine.Object.Destroy(temporaryCollider);
-                }
-            }
-
-            return !float.IsPositiveInfinity(nearestDistance);
-        }
-
-        private static List<MeshCollider> AddTemporaryVisualColliders(
-            Ray ray,
-            Transform scenery,
-            out int visualCandidates)
-        {
-            visualCandidates = 0;
-            List<MeshCollider> temporaryColliders = new List<MeshCollider>();
-
-            foreach (MeshFilter meshFilter in scenery.GetComponentsInChildren<MeshFilter>(true))
-            {
-                if (meshFilter == null || !meshFilter.gameObject.activeInHierarchy ||
-                    meshFilter.sharedMesh == null ||
-                    meshFilter.GetComponent<Collider>() != null)
-                {
-                    continue;
-                }
-
-                Renderer renderer = meshFilter.GetComponent<Renderer>();
-                float boundsDistance;
-                if (renderer == null || !renderer.enabled ||
-                    !renderer.bounds.IntersectRay(ray, out boundsDistance) ||
-                    boundsDistance > CaptureDistance)
-                {
-                    continue;
-                }
-
-                visualCandidates++;
-                MeshCollider temporaryCollider = null;
-                try
-                {
-                    temporaryCollider = meshFilter.gameObject.AddComponent<MeshCollider>();
-                    temporaryCollider.sharedMesh = meshFilter.sharedMesh;
-                    temporaryCollider.convex = false;
-                    temporaryCollider.isTrigger = false;
-
-                    if (temporaryCollider.sharedMesh != null)
-                    {
-                        temporaryColliders.Add(temporaryCollider);
-                    }
-                    else
-                    {
-                        temporaryCollider.enabled = false;
-                        UnityEngine.Object.Destroy(temporaryCollider);
-                    }
-                }
-                catch (Exception exception)
-                {
-                    if (temporaryCollider != null)
-                    {
-                        temporaryCollider.enabled = false;
-                        UnityEngine.Object.Destroy(temporaryCollider);
-                    }
-
-                    PowerfulOarPlugin.LogSource?.LogWarning(
-                        $"Could not make Bone Island visual '{meshFilter.gameObject.name}' " +
-                        $"temporarily raycastable for F7 capture: {exception.Message}");
-                }
-            }
-
-            return temporaryColliders;
-        }
-
-        private static Transform FindSceneryRoot(Scene scene)
-        {
-            foreach (GameObject root in scene.GetRootGameObjects())
-            {
-                if (root.name == "_scenery")
-                {
-                    return root.transform;
-                }
-            }
-
-            return null;
-        }
-
-        private static string FormatVector(Vector3 value)
-        {
-            return string.Format(
-                CultureInfo.InvariantCulture,
-                "({0:0.000}f, {1:0.000}f, {2:0.000}f)",
-                value.x,
-                value.y,
-                value.z);
-        }
-
-        private static void ShowNotification(string message)
-        {
-            if (NotificationUi.instance != null)
-            {
-                NotificationUi.instance.ShowNotification(message);
-            }
         }
     }
 
