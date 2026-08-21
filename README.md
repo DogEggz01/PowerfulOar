@@ -13,6 +13,6 @@
 
 ## Compatibility
 - Radrefinement food/water slider: Will use this mod's value as base. you can reduce it furthur with slider.
-- Row continually: Still apply this mod's force and speed limit value.
+- Row continually: Still apply this mod's force and speed limit value. Paddling animation will be vanilla one instead of radrefinement one.
 
 Prefeb used: 169, 666
