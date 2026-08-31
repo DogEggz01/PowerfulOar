@@ -72,7 +72,10 @@ namespace PowerfulOar
                 return;
             }
 
-            int prefabIndex = GetPrefabIndex(__instance.itemPrefab);
+            ShipItem configuredItem = __instance.itemPrefab != null
+                ? __instance.itemPrefab.GetComponent<ShipItem>()
+                : null;
+            int prefabIndex = OarStats.GetPrefabIndex(configuredItem);
             if (prefabIndex == ScaledOarFactory.BigOarPrefabIndex)
             {
                 return;
@@ -102,13 +105,6 @@ namespace PowerfulOar
             PowerfulOarPlugin.LogSource?.LogInfo(
                 $"Replaced one vanilla-oar vendor slot with Big Oar in {scene.name} " +
                 $"at '{placement.SpawnerName}' using its configured local pose.");
-        }
-
-        private static int GetPrefabIndex(GameObject prefab)
-        {
-            SaveablePrefab saveable =
-                prefab != null ? prefab.GetComponent<SaveablePrefab>() : null;
-            return saveable != null ? saveable.prefabIndex : -1;
         }
 
     }
@@ -164,7 +160,7 @@ namespace PowerfulOar
                 item,
                 localPosition,
                 localRotation,
-                2f);
+                ScaledOarFactory.BigOarScale);
 
             PowerfulOarPlugin.LogSource?.LogInfo(
                 $"Positioned Big Oar vendor display in {sceneName} at the " +
@@ -201,9 +197,8 @@ namespace PowerfulOar
                 return;
             }
 
-            // ScaledOarController restores ordinary item scale earlier in
-            // LateUpdate. Correct only this shop display instance afterward so
-            // parent scale (notably Gold Rock's 2x spawner) cannot double it.
+            // Preserve the configured world size when a vendor spawner has a
+            // non-unit parent scale (notably Gold Rock's 2x spawner).
             ApplyPlacement();
         }
 

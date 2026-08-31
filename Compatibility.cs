@@ -174,9 +174,7 @@ namespace PowerfulOar
 
         internal static bool IsExcluded(ShipItem item)
         {
-            int prefabIndex = OarStats.GetPrefabIndex(item);
-            return prefabIndex == ScaledOarFactory.BigOarPrefabIndex ||
-                   prefabIndex == ScaledOarFactory.Bfo5000PrefabIndex;
+            return OarStats.IsScaledOar(item);
         }
 
         internal static void Exclude(ShipItem item)

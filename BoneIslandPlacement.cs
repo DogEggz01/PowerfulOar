@@ -148,6 +148,9 @@ namespace PowerfulOar
             }
 
             ItemRigidbody itemBody = item.GetItemRigidbody();
+            ScaledOarController scaledOar =
+                instance.GetComponent<ScaledOarController>();
+            scaledOar?.SetPersistentKinematic(true);
             if (itemBody != null)
             {
                 itemBody.debugForceKinematic = true;
@@ -228,7 +231,17 @@ namespace PowerfulOar
             saveable?.RegisterToSave();
             if (itemBody != null)
             {
-                itemBody.debugForceKinematic = false;
+                ScaledOarController scaledOar =
+                    item.GetComponent<ScaledOarController>();
+                if (scaledOar != null)
+                {
+                    scaledOar.SetPersistentKinematic(false);
+                }
+                else
+                {
+                    itemBody.debugForceKinematic = false;
+                }
+
                 Rigidbody body = itemBody.GetComponent<Rigidbody>();
                 if (body != null)
                 {

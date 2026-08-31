@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using cakeslice;
@@ -82,6 +83,13 @@ namespace PowerfulOar
                 item != null ? item.GetComponent<SaveablePrefab>() : null;
             return saveable != null ? saveable.prefabIndex : -1;
         }
+
+        internal static bool IsScaledOar(ShipItem item)
+        {
+            int prefabIndex = GetPrefabIndex(item);
+            return prefabIndex == ScaledOarFactory.BigOarPrefabIndex ||
+                   prefabIndex == ScaledOarFactory.Bfo5000PrefabIndex;
+        }
     }
 
     internal sealed class ScaledOarDefinition
@@ -123,13 +131,15 @@ namespace PowerfulOar
         internal const int VanillaOarPrefabIndex = 168;
         internal const int BigOarPrefabIndex = 169;
         internal const int Bfo5000PrefabIndex = 666;
+        internal const float BigOarScale = 2f;
+        internal const float Bfo5000Scale = 5f;
 
         private static readonly ScaledOarDefinition[] Definitions =
         {
             new ScaledOarDefinition(
-                169, "Big Oar", 2f, 1.50f, 2.80f, 1.00f, 8f, 4),
+                169, "Big Oar", BigOarScale, 1.50f, 2.80f, 1.00f, 8f, 4),
             new ScaledOarDefinition(
-                666, "BFO 5000", 5f, 3.75f, 7.00f, 2.50f, 125f, 10)
+                666, "BFO 5000", Bfo5000Scale, 3.75f, 7.00f, 2.50f, 125f, 10)
         };
 
         internal static bool EnsureRegistered(PrefabsDirectory directory)
@@ -400,6 +410,13 @@ namespace PowerfulOar
         private ItemRigidbody itemRigidbody;
         private Outline outline;
         private bool wasInSleepOrLoadTransition;
+        private Coroutine initializationRoutine;
+        private bool initializationGuardActive;
+        private bool ownsKinematicGuard;
+        private bool persistentKinematic;
+        private bool waitingForSavedCrate;
+        private bool waitingForSavedInventory;
+        private int savedCrateId;
 
         internal int PrefabIndex => prefabIndex;
 
@@ -407,9 +424,115 @@ namespace PowerfulOar
         {
             prefabIndex = newPrefabIndex;
             targetScale = newTargetScale;
-            item = GetComponent<ShipItemOar>();
-            ApplyScale(transform);
+            CacheItemComponents();
+            BeginPhysicsInitialization();
             HookHangMoreCompatibility.Exclude(item);
+        }
+
+        internal bool CanRestoreSavedCrate(int crateId)
+        {
+            return waitingForSavedCrate && savedCrateId > 0 &&
+                   savedCrateId == crateId;
+        }
+
+        internal void PrepareForSavedState(SavePrefabData data)
+        {
+            if (data == null)
+            {
+                return;
+            }
+
+            CacheItemComponents();
+            BeginPhysicsInitialization();
+
+            waitingForSavedCrate = data.crateId > 0;
+            waitingForSavedInventory = !waitingForSavedCrate && data.inventorySlot > -1;
+            savedCrateId = waitingForSavedCrate ? data.crateId : 0;
+
+            if (!waitingForSavedCrate || item == null || itemRigidbody == null)
+            {
+                return;
+            }
+
+            // Saved crate contents are restored by ShipItem two frames later.
+            // Put the oar into a non-physical storage state immediately so its
+            // full-size colliders cannot overlap a boat during that window.
+            itemRigidbody.attached = true;
+            itemRigidbody.disableCol = true;
+            itemRigidbody.inStove = true;
+            transform.localScale = Vector3.one * item.inventoryScale * 0.33f;
+
+            Collider interactionCollider = item.GetComponent<Collider>();
+            if (interactionCollider != null)
+            {
+                interactionCollider.enabled = false;
+            }
+        }
+
+        internal void CompleteSavedCrateRestore(int crateId)
+        {
+            if (!CanRestoreSavedCrate(crateId))
+            {
+                return;
+            }
+
+            waitingForSavedCrate = false;
+            savedCrateId = 0;
+        }
+
+        internal void OnEnteredInventory()
+        {
+            waitingForSavedInventory = false;
+        }
+
+        internal void RestoreWorldScaleAfterStorage()
+        {
+            waitingForSavedCrate = false;
+            waitingForSavedInventory = false;
+            savedCrateId = 0;
+            CacheItemComponents();
+
+            Collider interactionCollider = item != null
+                ? item.GetComponent<Collider>()
+                : null;
+            if (interactionCollider != null)
+            {
+                interactionCollider.enabled = true;
+            }
+
+            BeginPhysicsInitialization();
+        }
+
+        internal void SetPersistentKinematic(bool state)
+        {
+            persistentKinematic = state;
+            CacheItemComponents();
+            if (itemRigidbody == null)
+            {
+                return;
+            }
+
+            if (state)
+            {
+                itemRigidbody.debugForceKinematic = true;
+            }
+            else if (!initializationGuardActive)
+            {
+                itemRigidbody.debugForceKinematic = false;
+            }
+
+            Rigidbody body = itemRigidbody.GetBody();
+            if (body != null)
+            {
+                if (state)
+                {
+                    body.isKinematic = true;
+                    body.velocity = Vector3.zero;
+                    body.angularVelocity = Vector3.zero;
+                }
+
+                body.useGravity = !state;
+            }
         }
 
         internal static void SuppressTransitionOutlines()
@@ -425,18 +548,25 @@ namespace PowerfulOar
 
         private void Awake()
         {
-            item = GetComponent<ShipItemOar>();
+            CacheItemComponents();
+            BeginPhysicsInitialization();
             HookHangMoreCompatibility.Exclude(item);
         }
 
         private void OnEnable()
         {
             ActiveControllers.Add(this);
+            StartInitializationRoutineIfNeeded();
         }
 
         private void OnDisable()
         {
             ActiveControllers.Remove(this);
+            if (initializationRoutine != null)
+            {
+                StopCoroutine(initializationRoutine);
+                initializationRoutine = null;
+            }
         }
 
         private void OnDestroy()
@@ -446,27 +576,10 @@ namespace PowerfulOar
 
         private void LateUpdate()
         {
+            CacheItemComponents();
             if (item == null)
             {
-                item = GetComponent<ShipItemOar>();
-                if (item == null)
-                {
-                    return;
-                }
-            }
-
-            if (itemRigidbody == null)
-            {
-                itemRigidbody = item.itemRigidbodyC;
-            }
-
-            if (itemRigidbody == null || itemRigidbody.GetCurrentInventorySlot() == null)
-            {
-                ApplyScale(transform);
-                if (itemRigidbody != null)
-                {
-                    ApplyScale(itemRigidbody.transform);
-                }
+                return;
             }
 
             bool inSleepOrLoadTransition =
@@ -500,6 +613,157 @@ namespace PowerfulOar
             {
                 target.localScale = desiredScale;
             }
+        }
+
+        private void CacheItemComponents()
+        {
+            if (item == null)
+            {
+                item = GetComponent<ShipItemOar>();
+            }
+
+            if (itemRigidbody == null && item != null)
+            {
+                itemRigidbody = item.itemRigidbodyC;
+            }
+        }
+
+        private void BeginPhysicsInitialization()
+        {
+            CacheItemComponents();
+            if (item == null || itemRigidbody == null)
+            {
+                return;
+            }
+
+            ApplyScale(transform);
+            ApplyScale(itemRigidbody.transform);
+
+            if (!initializationGuardActive)
+            {
+                initializationGuardActive = true;
+                if (!itemRigidbody.debugForceKinematic)
+                {
+                    itemRigidbody.debugForceKinematic = true;
+                    ownsKinematicGuard = true;
+                }
+            }
+
+            StartInitializationRoutineIfNeeded();
+        }
+
+        private void StartInitializationRoutineIfNeeded()
+        {
+            if (!initializationGuardActive || initializationRoutine != null ||
+                !isActiveAndEnabled || !gameObject.activeInHierarchy)
+            {
+                return;
+            }
+
+            initializationRoutine = StartCoroutine(CompletePhysicsInitialization());
+        }
+
+        private IEnumerator CompletePhysicsInitialization()
+        {
+            while (itemRigidbody == null || itemRigidbody.GetBody() == null ||
+                   itemRigidbody.GetComponent<Collider>() == null)
+            {
+                CacheItemComponents();
+                yield return null;
+            }
+
+            int storageRestoreGraceFrames = 0;
+            while (GameState.currentlyLoading || GameState.loadingBoatLocalItems ||
+                   GameState.recovering || waitingForSavedCrate ||
+                   waitingForSavedInventory)
+            {
+                bool loading = GameState.currentlyLoading ||
+                               GameState.loadingBoatLocalItems ||
+                               GameState.recovering;
+                if (!loading && (waitingForSavedCrate || waitingForSavedInventory))
+                {
+                    storageRestoreGraceFrames++;
+                    if (storageRestoreGraceFrames > 30)
+                    {
+                        RecoverFailedStorageRestore();
+                    }
+                }
+                else
+                {
+                    storageRestoreGraceFrames = 0;
+                }
+
+                yield return null;
+            }
+
+            Rigidbody body = itemRigidbody.GetBody();
+            if (body != null)
+            {
+                body.isKinematic = true;
+                body.velocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+                if (persistentKinematic)
+                {
+                    body.useGravity = false;
+                }
+            }
+
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            ReleaseInitializationGuard();
+        }
+
+        private void RecoverFailedStorageRestore()
+        {
+            bool failedCrateRestore = waitingForSavedCrate;
+            waitingForSavedCrate = false;
+            waitingForSavedInventory = false;
+            savedCrateId = 0;
+
+            SaveablePrefab saveable = item != null
+                ? item.GetComponent<SaveablePrefab>()
+                : null;
+            if (failedCrateRestore && saveable != null)
+            {
+                saveable.currentCrateId = 0;
+            }
+
+            if (itemRigidbody != null)
+            {
+                itemRigidbody.attached = false;
+                itemRigidbody.disableCol = false;
+                itemRigidbody.inStove = false;
+            }
+
+            Collider interactionCollider = item != null
+                ? item.GetComponent<Collider>()
+                : null;
+            if (interactionCollider != null)
+            {
+                interactionCollider.enabled = true;
+            }
+
+            ApplyScale(transform);
+            if (itemRigidbody != null)
+            {
+                ApplyScale(itemRigidbody.transform);
+            }
+
+            PowerfulOarPlugin.LogSource?.LogWarning(
+                $"Recovered {item?.name ?? "scaled oar"} after its saved " +
+                "inventory or crate location could not be restored.");
+        }
+
+        private void ReleaseInitializationGuard()
+        {
+            initializationRoutine = null;
+            initializationGuardActive = false;
+            if (ownsKinematicGuard && !persistentKinematic && itemRigidbody != null)
+            {
+                itemRigidbody.debugForceKinematic = false;
+            }
+
+            ownsKinematicGuard = false;
         }
 
         private void SuppressStaleOutline()

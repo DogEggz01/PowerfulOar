@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using BepInEx;
 using BepInEx.Logging;
@@ -17,13 +18,34 @@ namespace PowerfulOar
         BepInDependency.DependencyFlags.SoftDependency)]
     public sealed class PowerfulOarPlugin : BaseUnityPlugin
     {
+        private sealed class PatchTarget
+        {
+            internal PatchTarget(
+                Type patchType,
+                Type targetType,
+                string targetMethodName,
+                Type[] argumentTypes = null)
+            {
+                PatchType = patchType;
+                TargetType = targetType;
+                TargetMethodName = targetMethodName;
+                ArgumentTypes = argumentTypes;
+            }
+
+            internal Type PatchType { get; }
+            internal Type TargetType { get; }
+            internal string TargetMethodName { get; }
+            internal Type[] ArgumentTypes { get; }
+        }
+
         public const string PluginGuid = "DogEggz.PowerfulOar";
         public const string PluginName = "PowerfulOar";
-        public const string PluginVersion = "1.0.3";
+        public const string PluginVersion = "1.0.4";
 
         internal const string GoPointerInputLoopMethod = "LateUpdate";
 
         private Harmony harmony;
+        private readonly List<Harmony> featureHarmonies = new List<Harmony>();
 
         internal static PowerfulOarPlugin Instance { get; private set; }
         internal static ManualLogSource LogSource { get; private set; }
@@ -43,7 +65,27 @@ namespace PowerfulOar
                 typeof(OarLateUpdatePatch),
                 typeof(ShipItemOar),
                 nameof(ShipItemOar.ExtraLateUpdate));
-            bool prefabPatched = ApplyPatchClass(
+            bool lifecyclePatched = ApplyPatchGroup(
+                "runtime_lifecycle",
+                new PatchTarget(
+                    typeof(ScaledOarRigidbodyScalePatch),
+                    typeof(ItemRigidbody),
+                    nameof(ItemRigidbody.LateUpdate)),
+                new PatchTarget(
+                    typeof(ScaledOarSavedStatePatch),
+                    typeof(SaveablePrefab),
+                    nameof(SaveablePrefab.Load),
+                    new[] { typeof(SavePrefabData) }),
+                new PatchTarget(
+                    typeof(ScaledOarInventoryEnterPatch),
+                    typeof(ItemRigidbody),
+                    nameof(ItemRigidbody.EnterInventorySlot),
+                    new[] { typeof(Transform) }),
+                new PatchTarget(
+                    typeof(ScaledOarInventoryExitPatch),
+                    typeof(ItemRigidbody),
+                    nameof(ItemRigidbody.ExitInventorySlot)));
+            bool prefabPatched = lifecyclePatched && ApplyPatchClass(
                 typeof(ScaledOarPrefabRegistrationPatch),
                 typeof(PrefabsDirectory),
                 "Start");
@@ -60,20 +102,42 @@ namespace PowerfulOar
                 typeof(ShipItemHammer),
                 nameof(ShipItemHammer.CanNail),
                 new[] { typeof(ShipItem) });
-            bool vendorPatched = ApplyPatchClass(
-                typeof(BigOarVendorPatch),
-                typeof(ShopItemSpawner),
-                "Start");
-            bool vendorDisplayPatched = ApplyPatchClass(
-                typeof(BigOarVendorSpawnPatch),
-                typeof(ShopItemSpawner),
-                "SpawnItem");
+            bool vendorPatched = prefabPatched && ApplyPatchGroup(
+                "vendor_display",
+                new PatchTarget(
+                    typeof(BigOarVendorPatch),
+                    typeof(ShopItemSpawner),
+                    "Start"),
+                new PatchTarget(
+                    typeof(BigOarVendorSpawnPatch),
+                    typeof(ShopItemSpawner),
+                    "SpawnItem"));
             bool hookCompatibilityPatched = ApplyPatchClass(
                 typeof(HookHangMoreExclusionPatch),
                 typeof(ShipItem),
                 "Awake");
+            bool cratePatched = prefabPatched && ApplyPatchGroup(
+                "crate_blocker",
+                new PatchTarget(
+                    typeof(ScaledOarCrateInsertPatch),
+                    typeof(CrateInventory),
+                    nameof(CrateInventory.InsertItem),
+                    new[] { typeof(ShipItem) }),
+                new PatchTarget(
+                    typeof(ScaledOarCrateWithdrawPatch),
+                    typeof(CrateInventory),
+                    nameof(CrateInventory.WithdrawItem),
+                    new[] { typeof(ShipItem) }),
+                new PatchTarget(
+                    typeof(ScaledOarCrateUiPatch),
+                    typeof(CrateInventoryButton),
+                    nameof(CrateInventoryButton.OnActivate),
+                    new[] { typeof(GoPointer) }));
 
-            BoneIslandBfoPlacement.Initialize();
+            if (prefabPatched)
+            {
+                BoneIslandBfoPlacement.Initialize();
+            }
 
             Logger.LogInfo(
                 $"{PluginName} {PluginVersion} loaded. " +
@@ -82,8 +146,10 @@ namespace PowerfulOar
                 $"Patches: stats={statsPatched}, late update={lateUpdatePatched}, " +
                 $"prefab={prefabPatched}, outline wake fix={outlinePatched}, " +
                 $"reverse input={reverseInputPatched}, nailing={nailingPatched}, " +
-                $"vendors={vendorPatched}, vendor displays={vendorDisplayPatched}, " +
+                $"vendor display group={vendorPatched}, " +
                 $"HookHangMore exclusion={hookCompatibilityPatched}, " +
+                $"scaled-oar lifecycle group={lifecyclePatched}, " +
+                $"crate blocker group={cratePatched}, " +
                 $"RadRefinement needs={RadRefinementCompatibility.NeedsReductionEnabled}, " +
                 $"continual row={RadRefinementCompatibility.ContinualRowAvailable}.");
         }
@@ -120,9 +186,53 @@ namespace PowerfulOar
             }
         }
 
+        private bool ApplyPatchGroup(string groupName, params PatchTarget[] targets)
+        {
+            foreach (PatchTarget target in targets)
+            {
+                MethodInfo targetMethod = AccessTools.DeclaredMethod(
+                    target.TargetType,
+                    target.TargetMethodName,
+                    target.ArgumentTypes ?? Type.EmptyTypes);
+                if (targetMethod == null)
+                {
+                    Logger.LogError(
+                        $"Skipped patch group '{groupName}': target method " +
+                        $"{target.TargetType.FullName}.{target.TargetMethodName} was not found.");
+                    return false;
+                }
+            }
+
+            Harmony groupHarmony = new Harmony($"{PluginGuid}.{groupName}");
+            try
+            {
+                foreach (PatchTarget target in targets)
+                {
+                    groupHarmony.PatchAll(target.PatchType);
+                }
+
+                featureHarmonies.Add(groupHarmony);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                groupHarmony.UnpatchSelf();
+                Logger.LogError(
+                    $"Failed to apply patch group '{groupName}'; all patches in " +
+                    $"the group were rolled back: {exception}");
+                return false;
+            }
+        }
+
         private void OnDestroy()
         {
             BoneIslandBfoPlacement.Shutdown();
+            foreach (Harmony featureHarmony in featureHarmonies)
+            {
+                featureHarmony.UnpatchSelf();
+            }
+
+            featureHarmonies.Clear();
             harmony?.UnpatchSelf();
 
             if (Instance == this)
