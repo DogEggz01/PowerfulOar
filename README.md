@@ -10,6 +10,7 @@
   - It's a very strong oar but consume a lot of food and water each stroke.
   - I suggest lay it down flat, because it's very long that it will be easily glitched into ground.
 - Big Oar and BFO 5000 cannot be hanged even with HookHangMore mod, but can be hammered.
+- All oar still can be put into player inventory, because magic.
 
 
 ## Compatibility
