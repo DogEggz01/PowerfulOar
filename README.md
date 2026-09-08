@@ -3,8 +3,8 @@
 - Vanilla oar increase force slighty, increase speed limit to 4 knots
   - In game max speed will be around 3 knots on small boat.
   - Food/water consumption reduce to 25% of vanilla
-- Add Big Oar. Sold in all 3 main city. 2.25x vanilla force. Speed limit 5 knots.
-  - In game max speed will be around 4 knots on medium boat.
+- Add Big Oar. Sold in all 3 main city. 2.75x vanilla force. Speed limit 6 knots.
+  - In game max speed will be around 5 knots on medium boat.
   - Food/Water consumption reduce to 50% of vanilla
 - Add BFO 5000, a really big oar. You can find it at bone island.
   - It's a very strong oar but consume a lot of food and water each stroke.
@@ -17,4 +17,4 @@
 - Radrefinement food/water slider: Will use this mod's value as base. you can reduce it furthur with slider.
 - Row continually: Still apply this mod's force and speed limit value. Paddling animation will be vanilla one instead of radrefinement one.
 
-Prefeb used: 169, 666
+Prefeb used: 602, 666
