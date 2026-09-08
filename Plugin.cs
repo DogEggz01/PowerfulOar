@@ -40,7 +40,7 @@ namespace PowerfulOar
 
         public const string PluginGuid = "DogEggz.PowerfulOar";
         public const string PluginName = "PowerfulOar";
-        public const string PluginVersion = "1.0.4";
+        public const string PluginVersion = "1.0.5";
 
         internal const string GoPointerInputLoopMethod = "LateUpdate";
 

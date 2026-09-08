@@ -28,6 +28,7 @@ namespace PowerfulOar
         [HarmonyPostfix]
         private static void Postfix(SaveablePrefab __instance, SavePrefabData data)
         {
+            ScaledOarFactory.MigrateLegacyBigOar(__instance, data);
             ScaledOarController controller =
                 __instance.GetComponent<ScaledOarController>();
             controller?.PrepareForSavedState(data);

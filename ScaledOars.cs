@@ -10,12 +10,12 @@ namespace PowerfulOar
 {
     internal static class OarStats
     {
-        internal const float OriginalForce = 35000f;
+        internal const float OriginalForce = 36000f;
         internal const float OriginalMaxBoatSpeed = 2.06f;
         internal const float OriginalNeedsCostPerSecond = 0.1f;
 
-        internal const float BigForce = 76500f;
-        internal const float BigMaxBoatSpeed = 2.57f;
+        internal const float BigForce = 93500f;
+        internal const float BigMaxBoatSpeed = 3.1f;
         internal const float BigNeedsCostPerSecond = 0.2f;
 
         internal const float Bfo5000Force = 510000f;
@@ -33,6 +33,16 @@ namespace PowerfulOar
                     return true;
 
                 case ScaledOarFactory.BigOarPrefabIndex:
+                    oar.rowForce = BigForce;
+                    oar.maxBoatSpeed = BigMaxBoatSpeed;
+                    return true;
+
+                case ScaledOarFactory.LegacyBigOarPrefabIndex:
+                    if (!IsLegacyBigOar(oar))
+                    {
+                        return false;
+                    }
+
                     oar.rowForce = BigForce;
                     oar.maxBoatSpeed = BigMaxBoatSpeed;
                     return true;
@@ -69,6 +79,11 @@ namespace PowerfulOar
                 case ScaledOarFactory.BigOarPrefabIndex:
                     return BigNeedsCostPerSecond;
 
+                case ScaledOarFactory.LegacyBigOarPrefabIndex:
+                    return IsLegacyBigOar(oar)
+                        ? BigNeedsCostPerSecond
+                        : fallback;
+
                 case ScaledOarFactory.Bfo5000PrefabIndex:
                     return Bfo5000NeedsCostPerSecond;
 
@@ -88,7 +103,16 @@ namespace PowerfulOar
         {
             int prefabIndex = GetPrefabIndex(item);
             return prefabIndex == ScaledOarFactory.BigOarPrefabIndex ||
+                   IsLegacyBigOar(item) ||
                    prefabIndex == ScaledOarFactory.Bfo5000PrefabIndex;
+        }
+
+        private static bool IsLegacyBigOar(ShipItem item)
+        {
+            return item != null &&
+                   GetPrefabIndex(item) ==
+                       ScaledOarFactory.LegacyBigOarPrefabIndex &&
+                   item.GetComponent<ScaledOarController>() != null;
         }
     }
 
@@ -129,7 +153,8 @@ namespace PowerfulOar
     internal static class ScaledOarFactory
     {
         internal const int VanillaOarPrefabIndex = 168;
-        internal const int BigOarPrefabIndex = 169;
+        internal const int LegacyBigOarPrefabIndex = 169;
+        internal const int BigOarPrefabIndex = 602;
         internal const int Bfo5000PrefabIndex = 666;
         internal const float BigOarScale = 2f;
         internal const float Bfo5000Scale = 5f;
@@ -137,10 +162,16 @@ namespace PowerfulOar
         private static readonly ScaledOarDefinition[] Definitions =
         {
             new ScaledOarDefinition(
-                169, "Big Oar", BigOarScale, 1.50f, 2.80f, 1.00f, 8f, 4),
+                BigOarPrefabIndex, "Big Oar", BigOarScale,
+                1.50f, 2.80f, 1.00f, 8f, 4),
             new ScaledOarDefinition(
-                666, "BFO 5000", Bfo5000Scale, 3.75f, 7.00f, 2.50f, 125f, 10)
+                Bfo5000PrefabIndex, "BFO 5000", Bfo5000Scale,
+                3.75f, 7.00f, 2.50f, 125f, 10)
         };
+        private static readonly ScaledOarDefinition LegacyBigOarDefinition =
+            new ScaledOarDefinition(
+                LegacyBigOarPrefabIndex, "Big Oar", BigOarScale,
+                1.50f, 2.80f, 1.00f, 8f, 4);
 
         internal static bool EnsureRegistered(PrefabsDirectory directory)
         {
@@ -177,6 +208,8 @@ namespace PowerfulOar
             {
                 success &= EnsureRegistered(directory, definition, vanillaOar);
             }
+
+            success &= EnsureLegacyBigOarRegistered(directory, vanillaOar);
 
             return success;
         }
@@ -222,7 +255,145 @@ namespace PowerfulOar
                 }
             }
 
+            GameObject legacyPrefab = directory.directory[LegacyBigOarPrefabIndex];
+            ShipItem legacyItem =
+                legacyPrefab != null ? legacyPrefab.GetComponent<ShipItem>() : null;
+            SaveablePrefab legacySaveable =
+                legacyPrefab != null ? legacyPrefab.GetComponent<SaveablePrefab>() : null;
+            ScaledOarController legacyController = legacyPrefab != null
+                ? legacyPrefab.GetComponent<ScaledOarController>()
+                : null;
+            if (legacyItem == null || legacySaveable == null ||
+                legacyController == null ||
+                legacySaveable.prefabIndex != LegacyBigOarPrefabIndex ||
+                legacyController.PrefabIndex != LegacyBigOarPrefabIndex)
+            {
+                PowerfulOarPlugin.LogSource?.LogError(
+                    "Legacy Big Oar compatibility failed validation at prefab index " +
+                    $"{LegacyBigOarPrefabIndex}.");
+                success = false;
+            }
+            else
+            {
+                directory.shipItems[LegacyBigOarPrefabIndex] = legacyItem;
+            }
+
             return success;
+        }
+
+        internal static bool MigrateLegacyBigOar(
+            SaveablePrefab saveable,
+            SavePrefabData data)
+        {
+            if (saveable == null || data == null ||
+                data.prefabIndex != LegacyBigOarPrefabIndex)
+            {
+                return false;
+            }
+
+            ScaledOarController controller =
+                saveable.GetComponent<ScaledOarController>();
+            ShipItemOar oar = saveable.GetComponent<ShipItemOar>();
+            if (controller == null || oar == null ||
+                saveable.prefabIndex != LegacyBigOarPrefabIndex)
+            {
+                return false;
+            }
+
+            saveable.prefabIndex = BigOarPrefabIndex;
+            controller.Initialize(BigOarPrefabIndex, BigOarScale);
+            OarStats.Apply(oar);
+            PowerfulOarPlugin.LogSource?.LogInfo(
+                $"Migrated saved Big Oar from legacy prefab " +
+                $"{LegacyBigOarPrefabIndex} to {BigOarPrefabIndex}; " +
+                "the new index will be written on the next save.");
+            return true;
+        }
+
+        private static bool EnsureLegacyBigOarRegistered(
+            PrefabsDirectory directory,
+            ShipItemOar vanillaOar)
+        {
+            GameObject existing = directory.directory[LegacyBigOarPrefabIndex];
+            if (existing != null)
+            {
+                ScaledOarController controller =
+                    existing.GetComponent<ScaledOarController>();
+                SaveablePrefab saveable = existing.GetComponent<SaveablePrefab>();
+                ShipItemOar existingOar = existing.GetComponent<ShipItemOar>();
+                if (controller != null && saveable != null && existingOar != null &&
+                    controller.PrefabIndex == LegacyBigOarPrefabIndex &&
+                    saveable.prefabIndex == LegacyBigOarPrefabIndex)
+                {
+                    ConfigureScaledOar(
+                        existing,
+                        existingOar,
+                        vanillaOar,
+                        LegacyBigOarDefinition);
+                    controller.Initialize(LegacyBigOarPrefabIndex, BigOarScale);
+                    return true;
+                }
+
+                PowerfulOarPlugin.LogSource?.LogError(
+                    $"Could not reserve legacy Big Oar prefab index " +
+                    $"{LegacyBigOarPrefabIndex}: it is already occupied by " +
+                    $"'{existing.name}'. Old PowerfulOar saves using that index " +
+                    "cannot be migrated safely.");
+                return false;
+            }
+
+            GameObject currentBigOar = directory.directory[BigOarPrefabIndex];
+            ShipItemOar currentBigOarItem = currentBigOar != null
+                ? currentBigOar.GetComponent<ShipItemOar>()
+                : null;
+            if (currentBigOarItem == null)
+            {
+                PowerfulOarPlugin.LogSource?.LogError(
+                    "Could not create legacy Big Oar compatibility prefab: " +
+                    $"current prefab {BigOarPrefabIndex} is unavailable.");
+                return false;
+            }
+
+            GameObject clone = null;
+            try
+            {
+                clone = UnityEngine.Object.Instantiate(currentBigOar);
+                ShipItemOar cloneOar = clone.GetComponent<ShipItemOar>();
+                ScaledOarController controller =
+                    clone.GetComponent<ScaledOarController>();
+                if (cloneOar == null || controller == null)
+                {
+                    PowerfulOarPlugin.LogSource?.LogError(
+                        "Could not create legacy Big Oar compatibility prefab: " +
+                        "required components are missing.");
+                    UnityEngine.Object.Destroy(clone);
+                    return false;
+                }
+
+                ConfigureScaledOar(
+                    clone,
+                    cloneOar,
+                    vanillaOar,
+                    LegacyBigOarDefinition);
+                controller.Initialize(LegacyBigOarPrefabIndex, BigOarScale);
+                directory.directory[LegacyBigOarPrefabIndex] = clone;
+                PowerfulOarPlugin.LogSource?.LogInfo(
+                    $"Reserved prefab {LegacyBigOarPrefabIndex} for legacy " +
+                    $"Big Oar saves; new Big Oars use prefab {BigOarPrefabIndex}.");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                if (clone != null)
+                {
+                    UnityEngine.Object.Destroy(clone);
+                }
+
+                PowerfulOarPlugin.LogSource?.LogError(
+                    "Could not create legacy Big Oar compatibility prefab: " +
+                    exception);
+                return false;
+            }
         }
 
         private static bool EnsureRegistered(
