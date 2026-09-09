@@ -40,7 +40,7 @@ namespace PowerfulOar
 
         public const string PluginGuid = "DogEggz.PowerfulOar";
         public const string PluginName = "PowerfulOar";
-        public const string PluginVersion = "1.0.5";
+        public const string PluginVersion = "1.1.0";
 
         internal const string GoPointerInputLoopMethod = "LateUpdate";
 
@@ -109,9 +109,41 @@ namespace PowerfulOar
                     typeof(ShopItemSpawner),
                     "Start"),
                 new PatchTarget(
-                    typeof(BigOarVendorSpawnPatch),
+                    typeof(ScaledOarVendorSpawnPatch),
                     typeof(ShopItemSpawner),
-                    "SpawnItem"));
+                    "SpawnItem"),
+                new PatchTarget(
+                    typeof(HugeOarVendorPatch),
+                    typeof(Shopkeeper),
+                    "Start"));
+            bool hugeDialoguePatched = vendorPatched && ApplyPatchGroup(
+                "huge_oar_dialogue",
+                new PatchTarget(
+                    typeof(HugeOarDialogueCapturePatch),
+                    typeof(TavernRumorsDude),
+                    "Awake"),
+                new PatchTarget(
+                    typeof(HugeOarPurchasePatch),
+                    typeof(Shopkeeper),
+                    "SellItem",
+                    new[] { typeof(ShipItem), typeof(int), typeof(int) }),
+                new PatchTarget(
+                    typeof(HugeOarPurchaseSessionPatch),
+                    typeof(SaveLoadManager),
+                    "Awake"),
+                new PatchTarget(
+                    typeof(HugeOarPurchaseLoadGamePatch),
+                    typeof(SaveLoadManager),
+                    nameof(SaveLoadManager.LoadGame),
+                    new[] { typeof(int) }),
+                new PatchTarget(
+                    typeof(HugeOarPurchaseLoadPatch),
+                    typeof(SaveLoadManager),
+                    nameof(SaveLoadManager.LoadModData)),
+                new PatchTarget(
+                    typeof(HugeOarPurchaseStorePatch),
+                    typeof(SaveLoadManager),
+                    nameof(SaveLoadManager.SaveModData)));
             bool hookCompatibilityPatched = ApplyPatchClass(
                 typeof(HookHangMoreExclusionPatch),
                 typeof(ShipItem),
@@ -142,11 +174,13 @@ namespace PowerfulOar
             Logger.LogInfo(
                 $"{PluginName} {PluginVersion} loaded. " +
                 "Fixed per-oar stats and needs costs enabled. Hold Q to row opposite vanilla. " +
-                "Bone Island BFO placement and upright Big Oar vendor displays enabled. " +
+                "Bone Island BFO placement, scaled-oar vendor displays, and " +
+                "Kicia Bay Huge Oar enabled. " +
                 $"Patches: stats={statsPatched}, late update={lateUpdatePatched}, " +
                 $"prefab={prefabPatched}, outline wake fix={outlinePatched}, " +
                 $"reverse input={reverseInputPatched}, nailing={nailingPatched}, " +
                 $"vendor display group={vendorPatched}, " +
+                $"Huge Oar dialogue group={hugeDialoguePatched}, " +
                 $"HookHangMore exclusion={hookCompatibilityPatched}, " +
                 $"scaled-oar lifecycle group={lifecyclePatched}, " +
                 $"crate blocker group={cratePatched}, " +
@@ -227,6 +261,8 @@ namespace PowerfulOar
         private void OnDestroy()
         {
             BoneIslandBfoPlacement.Shutdown();
+            HugeOarDialogue.Shutdown();
+            HugeOarPurchaseState.Reset();
             foreach (Harmony featureHarmony in featureHarmonies)
             {
                 featureHarmony.UnpatchSelf();

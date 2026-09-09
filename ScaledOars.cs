@@ -18,6 +18,10 @@ namespace PowerfulOar
         internal const float BigMaxBoatSpeed = 3.1f;
         internal const float BigNeedsCostPerSecond = 0.2f;
 
+        internal const float HugeForce = 204000f;
+        internal const float HugeMaxBoatSpeed = 5.14f;
+        internal const float HugeNeedsCostPerSecond = 0.3f;
+
         internal const float Bfo5000Force = 510000f;
         internal const float Bfo5000MaxBoatSpeed = 10.29f;
         internal const float Bfo5000NeedsCostPerSecond = 1f;
@@ -45,6 +49,11 @@ namespace PowerfulOar
 
                     oar.rowForce = BigForce;
                     oar.maxBoatSpeed = BigMaxBoatSpeed;
+                    return true;
+
+                case ScaledOarFactory.HugeOarPrefabIndex:
+                    oar.rowForce = HugeForce;
+                    oar.maxBoatSpeed = HugeMaxBoatSpeed;
                     return true;
 
                 case ScaledOarFactory.Bfo5000PrefabIndex:
@@ -84,6 +93,9 @@ namespace PowerfulOar
                         ? BigNeedsCostPerSecond
                         : fallback;
 
+                case ScaledOarFactory.HugeOarPrefabIndex:
+                    return HugeNeedsCostPerSecond;
+
                 case ScaledOarFactory.Bfo5000PrefabIndex:
                     return Bfo5000NeedsCostPerSecond;
 
@@ -104,6 +116,7 @@ namespace PowerfulOar
             int prefabIndex = GetPrefabIndex(item);
             return prefabIndex == ScaledOarFactory.BigOarPrefabIndex ||
                    IsLegacyBigOar(item) ||
+                   prefabIndex == ScaledOarFactory.HugeOarPrefabIndex ||
                    prefabIndex == ScaledOarFactory.Bfo5000PrefabIndex;
         }
 
@@ -155,8 +168,10 @@ namespace PowerfulOar
         internal const int VanillaOarPrefabIndex = 168;
         internal const int LegacyBigOarPrefabIndex = 169;
         internal const int BigOarPrefabIndex = 602;
+        internal const int HugeOarPrefabIndex = 603;
         internal const int Bfo5000PrefabIndex = 666;
         internal const float BigOarScale = 2f;
+        internal const float HugeOarScale = 3f;
         internal const float Bfo5000Scale = 5f;
 
         private static readonly ScaledOarDefinition[] Definitions =
@@ -164,6 +179,9 @@ namespace PowerfulOar
             new ScaledOarDefinition(
                 BigOarPrefabIndex, "Big Oar", BigOarScale,
                 1.50f, 2.80f, 1.00f, 8f, 4),
+            new ScaledOarDefinition(
+                HugeOarPrefabIndex, "Huge Oar", HugeOarScale,
+                2.25f, 4.20f, 1.50f, 27f, 12),
             new ScaledOarDefinition(
                 Bfo5000PrefabIndex, "BFO 5000", Bfo5000Scale,
                 3.75f, 7.00f, 2.50f, 125f, 10)

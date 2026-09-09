@@ -145,7 +145,7 @@ namespace PowerfulOar
             if (NotificationUi.instance != null)
             {
                 NotificationUi.instance.ShowNotification(
-                    "Big Oar and BFO 5000 cannot be stored in crates.");
+                    "Scaled oars cannot be stored in crates.");
             }
 
             CrateInventoryUI.instance?.RefreshButtons();

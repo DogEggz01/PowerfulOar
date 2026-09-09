@@ -176,7 +176,8 @@ namespace PowerfulOar
                 ReplaceNeedCostConstant(codes, waterMatches[0], waterSelector);
                 PowerfulOarPlugin.LogSource?.LogInfo(
                     "Patched per-oar rowing water and food costs: " +
-                    "Original=0.1/s, Big Oar=0.2/s, BFO 5000=1/s.");
+                    "Original=0.1/s, Big Oar=0.2/s, Huge Oar=0.3/s, " +
+                    "BFO 5000=1/s.");
             }
             else
             {
