@@ -12,8 +12,6 @@ namespace PowerfulOar
         internal const string PluginGuid = "com.raddude.radrefinements";
 
         private const string ConfigsTypeName = "RadRefinements.Configs";
-        private const string OarPatchTypeName =
-            "RadRefinements.Patches.OarPatches+ShipItemOarPatches";
 
         private static ConfigEntry<float> rowingNeedsReduction;
         private static ConfigEntry<bool> continualRow;
@@ -41,9 +39,13 @@ namespace PowerfulOar
 
         internal static void Initialize(Harmony harmony)
         {
+            rowingNeedsReduction = null;
+            continualRow = null;
+            needsReductionEnabled = false;
+            continualRowAvailable = false;
+
             Type configsType = AccessTools.TypeByName(ConfigsTypeName);
-            Type oarPatchType = AccessTools.TypeByName(OarPatchTypeName);
-            if (configsType == null || oarPatchType == null)
+            if (configsType == null)
             {
                 return;
             }
@@ -61,15 +63,25 @@ namespace PowerfulOar
             MethodBase onAltHeld = AccessTools.DeclaredMethod(
                 typeof(ShipItemOar),
                 nameof(ShipItemOar.OnAltHeld));
-            MethodInfo reduceNeedsPrefix = AccessTools.Method(
-                oarPatchType,
+            Patches extraLateUpdatePatches =
+                extraLateUpdate != null
+                    ? Harmony.GetPatchInfo(extraLateUpdate)
+                    : null;
+            Patches onAltHeldPatches =
+                onAltHeld != null
+                    ? Harmony.GetPatchInfo(onAltHeld)
+                    : null;
+
+            MethodInfo reduceNeedsPrefix = FindOwnedPatch(
+                extraLateUpdatePatches?.Prefixes,
                 "ReduceNeedsPrefix");
-            MethodInfo reduceNeedsPostfix = AccessTools.Method(
-                oarPatchType,
+            MethodInfo reduceNeedsPostfix = FindOwnedPatch(
+                extraLateUpdatePatches?.Postfixes,
                 "ReduceNeedsPostfix");
-            MethodInfo continualRowPostfix = AccessTools.Method(
-                oarPatchType,
-                "ContinualRow");
+            MethodInfo continualRowPostfix = FindOwnedPatch(
+                onAltHeldPatches?.Postfixes,
+                "ContinualRow",
+                "Postfix");
 
             continualRowAvailable =
                 continualRow != null &&
@@ -84,8 +96,9 @@ namespace PowerfulOar
             {
                 PowerfulOarPlugin.LogSource?.LogWarning(
                     "RadRefinement was detected, but its rowing-needs patches " +
-                    "could not be safely replaced. Its slider will not alter " +
-                    "PowerfulOar needs costs.");
+                    "could not be safely replaced. Set RadRefinement's Rowing " +
+                    "needs reduction to 0 to avoid incorrect needs costs.");
+                LogContinualRowStatus();
                 return;
             }
 
@@ -122,11 +135,77 @@ namespace PowerfulOar
                     exception);
             }
 
+            LogContinualRowStatus();
+        }
+
+        private static void LogContinualRowStatus()
+        {
             if (continualRowAvailable)
             {
                 PowerfulOarPlugin.LogSource?.LogInfo(
                     "RadRefinement continual-row force compatibility enabled.");
+                return;
             }
+
+            if (continualRow != null)
+            {
+                PowerfulOarPlugin.LogSource?.LogWarning(
+                    "RadRefinement's continual-row patch could not be safely " +
+                    "identified. Disable its Row continually option to avoid " +
+                    "incorrect rowing force.");
+            }
+        }
+
+        private static MethodInfo FindOwnedPatch(
+            IEnumerable<Patch> patches,
+            params string[] acceptedMethodNames)
+        {
+            if (patches == null)
+            {
+                return null;
+            }
+
+            MethodInfo result = null;
+            foreach (Patch patch in patches)
+            {
+                MethodInfo patchMethod = patch.PatchMethod;
+                if (patch.owner != PluginGuid ||
+                    patchMethod == null ||
+                    !HasAcceptedName(patchMethod, acceptedMethodNames))
+                {
+                    continue;
+                }
+
+                if (result != null && !Equals(result, patchMethod))
+                {
+                    PowerfulOarPlugin.LogSource?.LogWarning(
+                        "Found multiple RadRefinement rowing patches where " +
+                        "exactly one was expected; compatibility was disabled.");
+                    return null;
+                }
+
+                result = patchMethod;
+            }
+
+            return result;
+        }
+
+        private static bool HasAcceptedName(
+            MethodInfo method,
+            IEnumerable<string> acceptedMethodNames)
+        {
+            foreach (string acceptedMethodName in acceptedMethodNames)
+            {
+                if (string.Equals(
+                    method.Name,
+                    acceptedMethodName,
+                    StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool ContainsPatch(
