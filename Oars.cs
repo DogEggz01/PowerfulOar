@@ -1,7 +1,5 @@
 // PowerfulOar: the scaled oar items (definitions, templates, per-oar stats, behaviour, item patches) and how an oar
-// behaves when rowed (force, needs, stroke, reverse input).
-// (The user, 2026-11-08: "Oars.cs: include newly added item, how oar behave"; placement is in Placement.cs, the rest in
-// Plugin.cs.)
+// behaves when rowed (force, needs, stroke, reverse input). Placement is in Placement.cs, the rest in Plugin.cs.
 using System.Collections.Generic;
 using System.Collections;
 using System.Reflection.Emit;
@@ -69,16 +67,16 @@ namespace PowerfulOar
 				}
 				return false;
 			}
-			if (directory.directory.Length <= 168 || directory.directory[168] == null)
+			if (directory.directory.Length <= ScaledOarFactory.VanillaOarPrefabIndex || directory.directory[ScaledOarFactory.VanillaOarPrefabIndex] == null)
 			{
 				ManualLogSource logSource2 = PowerfulOarPlugin.LogSource;
 				if (logSource2 != null)
 				{
-					logSource2.LogError("Could not register scaled oars: vanilla oar prefab " + string.Format("{0} was not found.", 168));
+					logSource2.LogError("Could not register scaled oars: vanilla oar prefab " + string.Format("{0} was not found.", ScaledOarFactory.VanillaOarPrefabIndex));
 				}
 				return false;
 			}
-			ShipItemOar component = directory.directory[168].GetComponent<ShipItemOar>();
+			ShipItemOar component = directory.directory[ScaledOarFactory.VanillaOarPrefabIndex].GetComponent<ShipItemOar>();
 			if (component == null)
 			{
 				ManualLogSource logSource3 = PowerfulOarPlugin.LogSource;
@@ -95,7 +93,7 @@ namespace PowerfulOar
 			{
 				flag &= ScaledOarFactory.EnsureRegistered(directory, definition, component);
 			}
-			return flag & ScaledOarFactory.EnsureLegacyBigOarRegistered(directory, component);
+			return flag;
 		}
 
 		internal static bool ValidateRuntimeCache(PrefabsDirectory directory)
@@ -136,136 +134,30 @@ namespace PowerfulOar
 					}
 				}
 			}
-			GameObject gameObject2 = directory.directory[169];
-			ShipItem shipItem2 = (gameObject2 != null) ? gameObject2.GetComponent<ShipItem>() : null;
-			SaveablePrefab saveablePrefab2 = (gameObject2 != null) ? gameObject2.GetComponent<SaveablePrefab>() : null;
-			ScaledOarController scaledOarController2 = (gameObject2 != null) ? gameObject2.GetComponent<ScaledOarController>() : null;
-			if (shipItem2 == null || saveablePrefab2 == null || scaledOarController2 == null || saveablePrefab2.prefabIndex != 169 || scaledOarController2.PrefabIndex != 169)
+			// Saves from PowerfulOar 1.0 hold Big Oars at index 169. The slot holds the Big Oar template, so the game's load
+			// copies it and the oar comes back with index 602, which the next save writes. Set here, after PrefabsDirectory.Start
+			// checks that each slot's prefab carries its own index. A slot another prefab holds is left to it, and the scaled oars
+			// still count as registered: only those old Big Oars are affected.
+			GameObject bigOar = directory.directory[ScaledOarFactory.BigOarPrefabIndex];
+			GameObject legacySlot = directory.directory[ScaledOarFactory.LegacyBigOarPrefabIndex];
+			if (legacySlot != null && legacySlot != bigOar)
 			{
-				ManualLogSource logSource3 = PowerfulOarPlugin.LogSource;
-				if (logSource3 != null)
+				if (!ScaledOarFactory.legacySlotLogged)
 				{
-					logSource3.LogError("Legacy Big Oar compatibility failed validation at prefab index " + string.Format("{0}.", 169));
+					ScaledOarFactory.legacySlotLogged = true;
+					ManualLogSource logSource3 = PowerfulOarPlugin.LogSource;
+					if (logSource3 != null)
+					{
+						logSource3.LogWarning(string.Format("Prefab index {0} is held by '{1}': Big Oars saved by PowerfulOar 1.0 load as that item.", ScaledOarFactory.LegacyBigOarPrefabIndex, legacySlot.name));
+					}
 				}
-				result = false;
 			}
-			else
+			else if (bigOar != null)
 			{
-				directory.shipItems[169] = shipItem2;
+				directory.directory[ScaledOarFactory.LegacyBigOarPrefabIndex] = bigOar;
+				directory.shipItems[ScaledOarFactory.LegacyBigOarPrefabIndex] = directory.shipItems[ScaledOarFactory.BigOarPrefabIndex];
 			}
 			return result;
-		}
-
-		internal static bool MigrateLegacyBigOar(SaveablePrefab saveable, SavePrefabData data)
-		{
-			if (saveable == null || data == null || data.prefabIndex != 169)
-			{
-				return false;
-			}
-			ScaledOarController component = saveable.GetComponent<ScaledOarController>();
-			ShipItemOar component2 = saveable.GetComponent<ShipItemOar>();
-			if (component == null || component2 == null || saveable.prefabIndex != 169)
-			{
-				return false;
-			}
-			saveable.prefabIndex = 602;
-			component.Initialize(602, 2f);
-			OarStats.Apply(component2);
-			ManualLogSource logSource = PowerfulOarPlugin.LogSource;
-			if (logSource != null)
-			{
-				logSource.LogInfo("Migrated saved Big Oar from legacy prefab " + string.Format("{0} to {1}; ", 169, 602) + "the new index will be written on the next save.");
-			}
-			return true;
-		}
-
-		private static bool EnsureLegacyBigOarRegistered(PrefabsDirectory directory, ShipItemOar vanillaOar)
-		{
-			GameObject gameObject = directory.directory[169];
-			if (gameObject != null)
-			{
-				ScaledOarController component = gameObject.GetComponent<ScaledOarController>();
-				SaveablePrefab component2 = gameObject.GetComponent<SaveablePrefab>();
-				ShipItemOar component3 = gameObject.GetComponent<ShipItemOar>();
-				if (component != null && component2 != null && component3 != null && component.PrefabIndex == 169 && component2.prefabIndex == 169)
-				{
-					ScaledOarFactory.ConfigureScaledOar(gameObject, component3, vanillaOar, ScaledOarFactory.LegacyBigOarDefinition);
-					component.Initialize(169, 2f);
-					return true;
-				}
-				ManualLogSource logSource = PowerfulOarPlugin.LogSource;
-				if (logSource != null)
-				{
-					logSource.LogError(string.Concat(new string[]
-					{
-						"Could not reserve legacy Big Oar prefab index ",
-						string.Format("{0}: it is already occupied by ", 169),
-						"'",
-						gameObject.name,
-						"'. Old PowerfulOar saves using that index cannot be migrated safely."
-					}));
-				}
-				return false;
-			}
-			else
-			{
-				GameObject gameObject2 = directory.directory[602];
-				if (((gameObject2 != null) ? gameObject2.GetComponent<ShipItemOar>() : null) == null)
-				{
-					ManualLogSource logSource2 = PowerfulOarPlugin.LogSource;
-					if (logSource2 != null)
-					{
-						logSource2.LogError("Could not create legacy Big Oar compatibility prefab: " + string.Format("current prefab {0} is unavailable.", 602));
-					}
-					return false;
-				}
-				GameObject gameObject3 = null;
-				bool result;
-				try
-				{
-					gameObject3 = Object.Instantiate<GameObject>(gameObject2, ScaledOarFactory.TemplateHolder(), false);
-					ShipItemOar component4 = gameObject3.GetComponent<ShipItemOar>();
-					ScaledOarController component5 = gameObject3.GetComponent<ScaledOarController>();
-					if (component4 == null || component5 == null)
-					{
-						ManualLogSource logSource3 = PowerfulOarPlugin.LogSource;
-						if (logSource3 != null)
-						{
-							logSource3.LogError("Could not create legacy Big Oar compatibility prefab: required components are missing.");
-						}
-						Object.Destroy(gameObject3);
-						result = false;
-					}
-					else
-					{
-						ScaledOarFactory.ConfigureScaledOar(gameObject3, component4, vanillaOar, ScaledOarFactory.LegacyBigOarDefinition);
-						component5.Initialize(169, 2f);
-						directory.directory[169] = gameObject3;
-						ManualLogSource logSource4 = PowerfulOarPlugin.LogSource;
-						if (logSource4 != null)
-						{
-							logSource4.LogInfo(string.Format("Reserved prefab {0} for legacy ", 169) + string.Format("Big Oar saves; new Big Oars use prefab {0}.", 602));
-						}
-						result = true;
-					}
-				}
-				catch (Exception ex)
-				{
-					if (gameObject3 != null)
-					{
-						Object.Destroy(gameObject3);
-					}
-					ManualLogSource logSource5 = PowerfulOarPlugin.LogSource;
-					if (logSource5 != null)
-					{
-						string str = "Could not create legacy Big Oar compatibility prefab: ";
-						Exception ex2 = ex;
-						logSource5.LogError(str + ((ex2 != null) ? ex2.ToString() : null));
-					}
-					result = false;
-				}
-				return result;
-			}
 		}
 
 		private static bool EnsureRegistered(PrefabsDirectory directory, ScaledOarDefinition definition, ShipItemOar vanillaOar)
@@ -310,7 +202,7 @@ namespace PowerfulOar
 					bool result;
 					try
 					{
-						gameObject2 = Object.Instantiate<GameObject>(directory.directory[168], ScaledOarFactory.TemplateHolder(), false);
+						gameObject2 = Object.Instantiate<GameObject>(directory.directory[ScaledOarFactory.VanillaOarPrefabIndex], ScaledOarFactory.TemplateHolder(), false);
 						Object component2 = gameObject2.GetComponent<SaveablePrefab>();
 						ShipItemOar component3 = gameObject2.GetComponent<ShipItemOar>();
 						if (component2 == null || component3 == null)
@@ -413,9 +305,8 @@ namespace PowerfulOar
 		}
 
 		// The templates are made under this inactive object, so they never wake (no ShipItem.Awake: no physics copy, no
-		// LODGroup, no updates), like the game's own prefab assets in the PrefabsDirectory. A copy of a template is made at the
-		// scene's root, active, and wakes the normal way. (Until the 2026-11-08 review the templates were live items kept
-		// 38.5 km off a new game's start.)
+		// LODGroup, no updates), like the game's own prefab assets. A copy of a template is made at the scene's root, active,
+		// and wakes the normal way.
 		internal static Transform TemplateHolder()
 		{
 			if (ScaledOarFactory.templateHolder == null)
@@ -428,12 +319,9 @@ namespace PowerfulOar
 			return ScaledOarFactory.templateHolder;
 		}
 
-		// A template that has woken (a live object put in the directory, as all templates were before the inactive holder) has a
-		// LODGroup from the game's ShipItem.AddLODGroup. Instantiate would copy it into every oar spawned from the template; the
-		// spawned oar's own ShipItem.AddLODGroup then gets null from AddComponent<LODGroup>() and throws, which ends its
-		// ShipItem.LoadAfterDelay early: an oar saved in a crate is then never put back in it. A dormant template has none, so
-		// this is a guard. DestroyImmediate, not Destroy: Destroy waits for the end of the frame, and the legacy prefab 169 is
-		// copied from the 602 template in the same frame.
+		// Guard for a template that woke: it then has a LODGroup (ShipItem.AddLODGroup), which Instantiate copies into each oar
+		// spawned from it; the oar's own AddLODGroup then throws and ends its ShipItem.LoadAfterDelay before an oar saved in a
+		// crate is put back. DestroyImmediate: a copy can be made from the template in the same frame.
 		private static void RemoveTemplateLodGroup(GameObject prefab)
 		{
 			LODGroup component = prefab.GetComponent<LODGroup>();
@@ -445,9 +333,9 @@ namespace PowerfulOar
 
 		private static void EnsureDirectoryCapacity(PrefabsDirectory directory)
 		{
-			if (directory.directory.Length <= 666)
+			if (directory.directory.Length <= ScaledOarFactory.Bfo5000PrefabIndex)
 			{
-				Array.Resize<GameObject>(ref directory.directory, 667);
+				Array.Resize<GameObject>(ref directory.directory, ScaledOarFactory.Bfo5000PrefabIndex + 1);
 			}
 		}
 
@@ -490,16 +378,15 @@ namespace PowerfulOar
 
 		private static readonly ScaledOarDefinition[] Definitions = new ScaledOarDefinition[]
 		{
-			new ScaledOarDefinition(602, "Big Oar", 2f, 1.5f, 2.8f, 1f, 8f, 4),
-			new ScaledOarDefinition(603, "Huge Oar", 3f, 2.25f, 4.2f, 1.5f, 27f, 12),
-			// Value 2000: a shop pays half the value of an owned oar (Shopkeeper.GetPrice), so it sells for 1000 (the user, 2026-11-08:
-			// "make it sell 1000").
-			new ScaledOarDefinition(666, "BFO 5000", 5f, 3.75f, 7f, 2.5f, 125f, 10, 2000)
+			new ScaledOarDefinition(ScaledOarFactory.BigOarPrefabIndex, "Big Oar", ScaledOarFactory.BigOarScale, 1.5f, 2.8f, 1f, 8f, 4),
+			new ScaledOarDefinition(ScaledOarFactory.HugeOarPrefabIndex, "Huge Oar", ScaledOarFactory.HugeOarScale, 2.25f, 4.2f, 1.5f, 27f, 12),
+			// Value 2000: a shop pays half an owned oar's value (Shopkeeper.GetPrice), so it sells for 1000.
+			new ScaledOarDefinition(ScaledOarFactory.Bfo5000PrefabIndex, "BFO 5000", ScaledOarFactory.Bfo5000Scale, 3.75f, 7f, 2.5f, 125f, 10, 2000)
 		};
 
-		private static readonly ScaledOarDefinition LegacyBigOarDefinition = new ScaledOarDefinition(169, "Big Oar", 2f, 1.5f, 2.8f, 1f, 8f, 4);
-
 		private static Transform templateHolder;
+
+		private static bool legacySlotLogged;
 	}
 
 	[DefaultExecutionOrder(10000)]
@@ -725,8 +612,8 @@ namespace PowerfulOar
 			this.initializationRoutine = base.StartCoroutine(this.CompletePhysicsInitialization());
 		}
 
-		// Rebuilt by hand from 1.1.1's compiled state machine (<CompletePhysicsInitialization>d__35), which the
-		// decompiler left unreconstructed.
+		// Holds the oar kinematic until its physics copy exists and loading has ended (a saved crate or pocket place gets 30
+		// frames after the load to take the oar back), then releases it one physics step later.
 		private IEnumerator CompletePhysicsInitialization()
 		{
 			while (this.itemRigidbody == null || this.itemRigidbody.GetBody() == null || this.itemRigidbody.GetComponent<Collider>() == null)
@@ -905,48 +792,27 @@ namespace PowerfulOar
 	{
 		internal static bool Apply(ShipItemOar oar)
 		{
-			int prefabIndex = OarStats.GetPrefabIndex(oar);
-			if (prefabIndex <= 169)
+			switch (OarStats.GetPrefabIndex(oar))
 			{
-				if (prefabIndex == 168)
-				{
-					oar.rowForce = 36000f;
-					oar.maxBoatSpeed = 2.06f;
-					return true;
-				}
-				if (prefabIndex == 169)
-				{
-					if (!OarStats.IsLegacyBigOar(oar))
-					{
-						return false;
-					}
-					oar.rowForce = 93500f;
-					oar.maxBoatSpeed = 3.1f;
-					return true;
-				}
+			case ScaledOarFactory.VanillaOarPrefabIndex:
+				oar.rowForce = OarStats.OriginalForce;
+				oar.maxBoatSpeed = OarStats.OriginalMaxBoatSpeed;
+				return true;
+			case ScaledOarFactory.BigOarPrefabIndex:
+				oar.rowForce = OarStats.BigForce;
+				oar.maxBoatSpeed = OarStats.BigMaxBoatSpeed;
+				return true;
+			case ScaledOarFactory.HugeOarPrefabIndex:
+				oar.rowForce = OarStats.HugeForce;
+				oar.maxBoatSpeed = OarStats.HugeMaxBoatSpeed;
+				return true;
+			case ScaledOarFactory.Bfo5000PrefabIndex:
+				oar.rowForce = OarStats.Bfo5000Force;
+				oar.maxBoatSpeed = OarStats.Bfo5000MaxBoatSpeed;
+				return true;
+			default:
+				return false;
 			}
-			else
-			{
-				if (prefabIndex == 602)
-				{
-					oar.rowForce = 93500f;
-					oar.maxBoatSpeed = 3.1f;
-					return true;
-				}
-				if (prefabIndex == 603)
-				{
-					oar.rowForce = 204000f;
-					oar.maxBoatSpeed = 5.14f;
-					return true;
-				}
-				if (prefabIndex == 666)
-				{
-					oar.rowForce = 510000f;
-					oar.maxBoatSpeed = 10.29f;
-					return true;
-				}
-			}
-			return false;
 		}
 
 		internal static float GetWaterCostPerSecond(ShipItemOar oar)
@@ -961,38 +827,19 @@ namespace PowerfulOar
 
 		private static float GetNeedsCostPerSecond(ShipItemOar oar, float fallback)
 		{
-			int prefabIndex = OarStats.GetPrefabIndex(oar);
-			if (prefabIndex <= 169)
+			switch (OarStats.GetPrefabIndex(oar))
 			{
-				if (prefabIndex == 168)
-				{
-					return 0.1f;
-				}
-				if (prefabIndex == 169)
-				{
-					if (!OarStats.IsLegacyBigOar(oar))
-					{
-						return fallback;
-					}
-					return 0.2f;
-				}
+			case ScaledOarFactory.VanillaOarPrefabIndex:
+				return OarStats.OriginalNeedsCostPerSecond;
+			case ScaledOarFactory.BigOarPrefabIndex:
+				return OarStats.BigNeedsCostPerSecond;
+			case ScaledOarFactory.HugeOarPrefabIndex:
+				return OarStats.HugeNeedsCostPerSecond;
+			case ScaledOarFactory.Bfo5000PrefabIndex:
+				return OarStats.Bfo5000NeedsCostPerSecond;
+			default:
+				return fallback;
 			}
-			else
-			{
-				if (prefabIndex == 602)
-				{
-					return 0.2f;
-				}
-				if (prefabIndex == 603)
-				{
-					return 0.3f;
-				}
-				if (prefabIndex == 666)
-				{
-					return 1f;
-				}
-			}
-			return fallback;
 		}
 
 		internal static int GetPrefabIndex(ShipItem item)
@@ -1007,15 +854,14 @@ namespace PowerfulOar
 
 		internal static bool IsScaledOar(ShipItem item)
 		{
-			// Runs for every item in the world every frame (ScaledOarRigidbodyScalePatch on ItemRigidbody.LateUpdate), so it
-			// reads the SaveablePrefab once; the same answer as IsLegacyBigOar for prefab 169.
+			// Runs for every item in the world every frame (ScaledOarRigidbodyScalePatch on ItemRigidbody.LateUpdate): only an
+			// oar can be one, and the type test spares every other item the SaveablePrefab lookup.
+			if (!(item is ShipItemOar))
+			{
+				return false;
+			}
 			int prefabIndex = OarStats.GetPrefabIndex(item);
-			return prefabIndex == 602 || prefabIndex == 603 || prefabIndex == 666 || (prefabIndex == 169 && item.GetComponent<ScaledOarController>() != null);
-		}
-
-		private static bool IsLegacyBigOar(ShipItem item)
-		{
-			return item != null && OarStats.GetPrefabIndex(item) == 169 && item.GetComponent<ScaledOarController>() != null;
+			return prefabIndex == ScaledOarFactory.BigOarPrefabIndex || prefabIndex == ScaledOarFactory.HugeOarPrefabIndex || prefabIndex == ScaledOarFactory.Bfo5000PrefabIndex;
 		}
 
 		internal const float OriginalForce = 36000f;
@@ -1070,7 +916,6 @@ namespace PowerfulOar
 		[HarmonyPostfix]
 		private static void Postfix(SaveablePrefab __instance, SavePrefabData data)
 		{
-			ScaledOarFactory.MigrateLegacyBigOar(__instance, data);
 			ScaledOarController component = __instance.GetComponent<ScaledOarController>();
 			if (component == null)
 			{
@@ -1278,7 +1123,7 @@ namespace PowerfulOar
 		[HarmonyPostfix]
 		[HarmonyAfter(new string[]
 		{
-			"com.raddude.radrefinements"
+			RadRefinementCompatibility.PluginGuid
 		})]
 		private static void Postfix(ShipItemOar __instance, bool ___isOverWater, OarStatsPatch.RowCallState __state)
 		{
@@ -1316,8 +1161,8 @@ namespace PowerfulOar
 			FieldInfo needsField = AccessTools.Field(typeof(PlayerNeeds), "water");
 			FieldInfo needsField2 = AccessTools.Field(typeof(PlayerNeeds), "food");
 			FieldInfo rowProgressField = AccessTools.Field(typeof(ShipItemOar), "rowProgress");
-			List<int> list2 = OarLateUpdatePatch.FindNeedCostConstants(list, needsField, 0.4f);
-			List<int> list3 = OarLateUpdatePatch.FindNeedCostConstants(list, needsField2, 0.6f);
+			List<int> list2 = OarLateUpdatePatch.FindNeedCostConstants(list, needsField, OarLateUpdatePatch.VanillaWaterCost);
+			List<int> list3 = OarLateUpdatePatch.FindNeedCostConstants(list, needsField2, OarLateUpdatePatch.VanillaFoodCost);
 			if (list2.Count == 1 && list3.Count == 1)
 			{
 				MethodInfo selector = AccessTools.Method(typeof(OarLateUpdatePatch), "SelectWaterCost", null, null);
@@ -1440,7 +1285,7 @@ namespace PowerfulOar
 		private const float VanillaFoodCost = 0.6f;
 	}
 
-	[HarmonyPatch(typeof(GoPointer), "LateUpdate")]
+	[HarmonyPatch(typeof(GoPointer), PowerfulOarPlugin.GoPointerInputLoopMethod)]
 	internal static class ReverseOarInputPatch
 	{
 		[HarmonyPostfix]
@@ -1451,7 +1296,8 @@ namespace PowerfulOar
 				return;
 			}
 			ShipItemOar shipItemOar = __instance.GetHeldItem() as ShipItemOar;
-			if (shipItemOar == null || GameInput.GetKey(InputName.Activate))
+			// Only an owned oar: on one still for sale, OnAltActivate would buy it.
+			if (shipItemOar == null || !shipItemOar.sold || GameInput.GetKey(InputName.Activate))
 			{
 				return;
 			}

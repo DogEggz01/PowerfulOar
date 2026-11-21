@@ -1,5 +1,5 @@
-// PowerfulOar: the plugin (start-up and patching) and compatibility with other mods.
-// (The user, 2026-11-08: "Plugin.cs: all other code"; the items and rowing are in Oars.cs, placement in Placement.cs.)
+// PowerfulOar: the plugin (start-up and patching) and compatibility with other mods. The items and rowing are in Oars.cs,
+// placement in Placement.cs.
 using System.Collections.Generic;
 using System.Reflection;
 using System;
@@ -16,8 +16,8 @@ namespace PowerfulOar
 	// ---- Plugin: start-up and patching ----
 
 	[BepInPlugin(PowerfulOarPlugin.PluginGuid, PowerfulOarPlugin.PluginName, PowerfulOarPlugin.PluginVersion)]
-	[BepInDependency("com.raddude.hookshangmore", BepInDependency.DependencyFlags.SoftDependency)]
-	[BepInDependency("com.raddude.radrefinements", BepInDependency.DependencyFlags.SoftDependency)]
+	[BepInDependency(HookHangMoreCompatibility.PluginGuid, BepInDependency.DependencyFlags.SoftDependency)]
+	[BepInDependency(RadRefinementCompatibility.PluginGuid, BepInDependency.DependencyFlags.SoftDependency)]
 	public sealed class PowerfulOarPlugin : BaseUnityPlugin
 	{
 		internal static PowerfulOarPlugin Instance { get; private set; }
@@ -28,7 +28,7 @@ namespace PowerfulOar
 		{
 			PowerfulOarPlugin.Instance = this;
 			PowerfulOarPlugin.LogSource = base.Logger;
-			this.harmony = new Harmony("DogEggz.PowerfulOar");
+			this.harmony = new Harmony(PowerfulOarPlugin.PluginGuid);
 			RadRefinementCompatibility.Initialize(this.harmony);
 			bool flag = this.ApplyPatchClass(typeof(OarStatsPatch), typeof(ShipItemOar), "OnAltHeld", null);
 			bool flag2 = this.ApplyPatchClass(typeof(OarLateUpdatePatch), typeof(ShipItemOar), "ExtraLateUpdate", null);
@@ -47,7 +47,7 @@ namespace PowerfulOar
 			});
 			bool flag4 = flag3 && this.ApplyPatchClass(typeof(ScaledOarPrefabRegistrationPatch), typeof(PrefabsDirectory), "Start", null);
 			bool flag5 = this.ApplyPatchClass(typeof(ScaledOarOutlineEffectPatch), typeof(OutlineEffect), "OnEnable", null);
-			bool flag6 = this.ApplyPatchClass(typeof(ReverseOarInputPatch), typeof(GoPointer), "LateUpdate", null);
+			bool flag6 = this.ApplyPatchClass(typeof(ReverseOarInputPatch), typeof(GoPointer), PowerfulOarPlugin.GoPointerInputLoopMethod, null);
 			bool flag7 = this.ApplyPatchClass(typeof(ScaledOarNailingPatch), typeof(ShipItemHammer), "CanNail", new Type[]
 			{
 				typeof(ShipItem)
@@ -160,7 +160,7 @@ namespace PowerfulOar
 					return false;
 				}
 			}
-			Harmony harmony = new Harmony("DogEggz.PowerfulOar." + groupName);
+			Harmony harmony = new Harmony(PowerfulOarPlugin.PluginGuid + "." + groupName);
 			bool result;
 			try
 			{
@@ -206,7 +206,7 @@ namespace PowerfulOar
 
 		public const string PluginName = "PowerfulOar";
 
-		public const string PluginVersion = "1.1.2";
+		public const string PluginVersion = "1.1.3";
 
 		internal const string GoPointerInputLoopMethod = "LateUpdate";
 
@@ -280,7 +280,7 @@ namespace PowerfulOar
 			RadRefinementCompatibility.continualRow = null;
 			RadRefinementCompatibility.needsReductionEnabled = false;
 			RadRefinementCompatibility.continualRowAvailable = false;
-			Type type = AccessTools.TypeByName("RadRefinements.Configs");
+			Type type = AccessTools.TypeByName(RadRefinementCompatibility.ConfigsTypeName);
 			if (type == null)
 			{
 				return;
@@ -386,7 +386,7 @@ namespace PowerfulOar
 			foreach (Patch patch in patches)
 			{
 				MethodInfo patchMethod = patch.PatchMethod;
-				if (!(patch.owner != "com.raddude.radrefinements") && !(patchMethod == null) && RadRefinementCompatibility.HasAcceptedName(patchMethod, acceptedMethodNames))
+				if (!(patch.owner != RadRefinementCompatibility.PluginGuid) && !(patchMethod == null) && RadRefinementCompatibility.HasAcceptedName(patchMethod, acceptedMethodNames))
 				{
 					if (methodInfo != null && !object.Equals(methodInfo, patchMethod))
 					{
@@ -484,9 +484,8 @@ namespace PowerfulOar
 				return;
 			}
 			Behaviour behaviour = component2 as Behaviour;
-			// A component already disabled is usually this one waiting for its Destroy at the end of the frame (a scaled oar's
-			// ShipItem.Awake postfix, its ScaledOarController.Awake and Initialize all call Exclude in one frame): destroy it again
-			// as before, but log it once.
+			// Exclude can run three times in one frame for an oar (its ShipItem.Awake postfix, ScaledOarController.Awake and
+			// Initialize). A component already disabled is waiting for its Destroy at the frame's end: logged the first time only.
 			bool firstTime = behaviour == null || behaviour.enabled;
 			if (behaviour != null)
 			{
@@ -505,10 +504,9 @@ namespace PowerfulOar
 			logSource2.LogInfo("Removed HooksHangMore attachment support from " + item.name + ".");
 		}
 
-		// Looked up once: AccessTools.TypeByName searches every type of every loaded assembly (measured 2026-11-08 with the
-		// game's and the workspace mod list's 158 assemblies: 7 ms a call when found, 32 ms and a HarmonyX warning when not),
-		// and Exclude runs several times for each scaled oar spawned or each template refreshed. The first call comes from
-		// PrefabsDirectory.Start in the game scene, after every plugin's assembly has loaded.
+		// Looked up once: AccessTools.TypeByName searches every type of every loaded assembly (milliseconds a call, and a
+		// HarmonyX warning when the type is missing). The first call comes from PrefabsDirectory.Start, after every plugin has
+		// loaded.
 		private static Type AttachableItemType
 		{
 			get
@@ -534,7 +532,7 @@ namespace PowerfulOar
 	[HarmonyPatch(typeof(ShipItem), "Awake")]
 	[HarmonyAfter(new string[]
 	{
-		"com.raddude.hookshangmore"
+		HookHangMoreCompatibility.PluginGuid
 	})]
 	internal static class HookHangMoreExclusionPatch
 	{

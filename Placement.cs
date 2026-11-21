@@ -1,6 +1,5 @@
 // PowerfulOar: where the oars appear: the Big Oar and Huge Oar vendor placement, the Huge Oar purchase dialogue at
 // Kicia Bay (with its saved purchase count) and the BFO 5000's placement at Bone Island.
-// (The user, 2026-11-08: "Placement.cs: include vendor placement, dialogue and BFO placement".)
 using System.Collections.Generic;
 using System.Collections;
 using System.Globalization;
@@ -42,11 +41,11 @@ namespace PowerfulOar
 			else
 			{
 				int prefabIndex = OarStats.GetPrefabIndex((__instance.itemPrefab != null) ? __instance.itemPrefab.GetComponent<ShipItem>() : null);
-				if (prefabIndex == 602)
+				if (prefabIndex == ScaledOarFactory.BigOarPrefabIndex)
 				{
 					return;
 				}
-				if (prefabIndex != 168)
+				if (prefabIndex != ScaledOarFactory.VanillaOarPrefabIndex)
 				{
 					ManualLogSource logSource2 = PowerfulOarPlugin.LogSource;
 					if (logSource2 == null)
@@ -60,19 +59,19 @@ namespace PowerfulOar
 						"' in ",
 						scene.name,
 						" does not contain vanilla oar prefab ",
-						string.Format("{0}; found {1}.", 168, prefabIndex)
+						string.Format("{0}; found {1}.", ScaledOarFactory.VanillaOarPrefabIndex, prefabIndex)
 					}));
 					return;
 				}
 				else
 				{
-					__instance.itemPrefab = instance.directory[602];
+					__instance.itemPrefab = instance.directory[ScaledOarFactory.BigOarPrefabIndex];
 					ScaledOarVendorDisplaySpawner scaledOarVendorDisplaySpawner = __instance.GetComponent<ScaledOarVendorDisplaySpawner>();
 					if (scaledOarVendorDisplaySpawner == null)
 					{
 						scaledOarVendorDisplaySpawner = __instance.gameObject.AddComponent<ScaledOarVendorDisplaySpawner>();
 					}
-					scaledOarVendorDisplaySpawner.Initialize(scene.name, "Big Oar", 602, vendorPlacement.LocalPosition, vendorPlacement.LocalEuler, 2f);
+					scaledOarVendorDisplaySpawner.Initialize(scene.name, "Big Oar", ScaledOarFactory.BigOarPrefabIndex, vendorPlacement.LocalPosition, vendorPlacement.LocalEuler, ScaledOarFactory.BigOarScale);
 					ManualLogSource logSource3 = PowerfulOarPlugin.LogSource;
 					if (logSource3 == null)
 					{
@@ -264,12 +263,12 @@ namespace PowerfulOar
 
 		internal static bool IsTarget(Shopkeeper shopkeeper)
 		{
-			if (shopkeeper == null || shopkeeper.gameObject.name != "shopkeeper (16)")
+			if (shopkeeper == null || shopkeeper.gameObject.name != HugeOarVendorPatch.ShopkeeperName)
 			{
 				return false;
 			}
 			Scene scene = shopkeeper.gameObject.scene;
-			return scene.IsValid() && scene.name == "island 27 Lagoon SwampShipyard";
+			return scene.IsValid() && scene.name == HugeOarVendorPatch.SceneName;
 		}
 
 		internal const string SceneName = "island 27 Lagoon SwampShipyard";
@@ -307,7 +306,7 @@ namespace PowerfulOar
 				return;
 			}
 			this.nextAttempt = Time.unscaledTime + 1f;
-			Transform transform = this.shopkeeper.transform.Find("Modular NPC");
+			Transform transform = this.shopkeeper.transform.Find(HugeOarVendorPatch.NpcName);
 			if (transform == null)
 			{
 				if (!this.reportedMissingNpc)
@@ -337,7 +336,7 @@ namespace PowerfulOar
 				base.enabled = false;
 				return;
 			}
-			if (transform.Find("PowerfulOar Huge Oar shop spawner") != null)
+			if (transform.Find(HugeOarVendorInstaller.SpawnerName) != null)
 			{
 				ManualLogSource logSource3 = PowerfulOarPlugin.LogSource;
 				if (logSource3 != null)
@@ -351,17 +350,17 @@ namespace PowerfulOar
 			GameObject gameObject = null;
 			try
 			{
-				gameObject = new GameObject("PowerfulOar Huge Oar shop spawner");
+				gameObject = new GameObject(HugeOarVendorInstaller.SpawnerName);
 				gameObject.SetActive(false);
 				gameObject.transform.SetParent(transform, false);
 				gameObject.transform.localPosition = HugeOarVendorInstaller.LocalPosition;
 				gameObject.transform.localRotation = Quaternion.Euler(HugeOarVendorInstaller.LocalEuler);
 				gameObject.transform.localScale = Vector3.one;
 				ShopItemSpawner shopItemSpawner = gameObject.AddComponent<ShopItemSpawner>();
-				shopItemSpawner.itemPrefab = instance.directory[603];
+				shopItemSpawner.itemPrefab = instance.directory[ScaledOarFactory.HugeOarPrefabIndex];
 				shopItemSpawner.availableAtNight = false;
 				shopItemSpawner.priceMult = 1f;
-				gameObject.AddComponent<ScaledOarVendorDisplaySpawner>().Initialize("island 27 Lagoon SwampShipyard", "Huge Oar", 603, Vector3.zero, Vector3.zero, 3f);
+				gameObject.AddComponent<ScaledOarVendorDisplaySpawner>().Initialize(HugeOarVendorPatch.SceneName, "Huge Oar", ScaledOarFactory.HugeOarPrefabIndex, Vector3.zero, Vector3.zero, ScaledOarFactory.HugeOarScale);
 				this.dialogueArea = HugeOarPurchaseDialogueArea.Create(transform);
 				gameObject.SetActive(true);
 				this.complete = true;
@@ -474,15 +473,15 @@ namespace PowerfulOar
 		private static void QueueScene(Scene scene)
 		{
 			PowerfulOarPlugin instance = PowerfulOarPlugin.Instance;
-			if (instance == null || !scene.IsValid() || !scene.isLoaded || scene.name != "island 36 ()" || !BoneIslandBfoPlacement.PendingScenes.Add(scene.handle))
+			if (instance == null || !scene.IsValid() || !scene.isLoaded || scene.name != BoneIslandBfoPlacement.BoneIslandSceneName || !BoneIslandBfoPlacement.PendingScenes.Add(scene.handle))
 			{
 				return;
 			}
 			instance.StartCoroutine(BoneIslandBfoPlacement.PlaceWhenReady(scene));
 		}
 
-		// Rebuilt by hand from 1.1.1's compiled state machine (<PlaceWhenReady>d__12), which the decompiler left
-		// unreconstructed.
+		// Waits until play has started and the camera is within SafeSpawnDistance of the place, then places the display once.
+		// Ends when the scene unloads.
 		private static IEnumerator PlaceWhenReady(Scene scene)
 		{
 			int sceneHandle = scene.handle;
@@ -501,7 +500,7 @@ namespace PowerfulOar
 				PrefabsDirectory instance = PrefabsDirectory.instance;
 				Camera main = Camera.main;
 				Vector3 b = (scenery != null) ? scenery.TransformPoint(BoneIslandBfoPlacement.LocalPosition) : Vector3.zero;
-				if (GameState.playing && !GameState.currentlyLoading && scenery != null && main != null && Vector3.Distance(main.transform.position, b) <= 500f && instance != null && instance.directory != null && instance.directory.Length > 666 && instance.directory[666] != null)
+				if (GameState.playing && !GameState.currentlyLoading && scenery != null && main != null && Vector3.Distance(main.transform.position, b) <= BoneIslandBfoPlacement.SafeSpawnDistance && instance != null && instance.directory != null && instance.directory.Length > ScaledOarFactory.Bfo5000PrefabIndex && instance.directory[ScaledOarFactory.Bfo5000PrefabIndex] != null)
 				{
 					if (ScaledOarFactory.ValidateRuntimeCache(instance))
 					{
@@ -516,7 +515,7 @@ namespace PowerfulOar
 
 		private static void TryPlace(PrefabsDirectory directory, Transform scenery)
 		{
-			GameObject gameObject = directory.directory[666];
+			GameObject gameObject = directory.directory[ScaledOarFactory.Bfo5000PrefabIndex];
 			if (BoneIslandBfoPlacement.HasExistingRuntimeBfo(gameObject))
 			{
 				ManualLogSource logSource = PowerfulOarPlugin.LogSource;
@@ -580,7 +579,7 @@ namespace PowerfulOar
 				{
 					return;
 				}
-				logSource3.LogInfo("Placed one fixed BFO 5000 at the configured Bone Island _scenery-local pose. It will enter normal item/save control when picked up. " + string.Format("Camera was within {0:0} m of the placement.", 500f));
+				logSource3.LogInfo("Placed one fixed BFO 5000 at the configured Bone Island _scenery-local pose. It will enter normal item/save control when picked up. " + string.Format("Camera was within {0:0} m of the placement.", BoneIslandBfoPlacement.SafeSpawnDistance));
 				return;
 			}
 		}
@@ -589,7 +588,7 @@ namespace PowerfulOar
 		{
 			foreach (SaveablePrefab saveablePrefab in Resources.FindObjectsOfTypeAll<SaveablePrefab>())
 			{
-				if (saveablePrefab != null && saveablePrefab.prefabIndex == 666 && saveablePrefab.gameObject != registeredPrefab)
+				if (saveablePrefab != null && saveablePrefab.prefabIndex == ScaledOarFactory.Bfo5000PrefabIndex && saveablePrefab.gameObject != registeredPrefab)
 				{
 					return true;
 				}
@@ -674,12 +673,10 @@ namespace PowerfulOar
 			logSource.LogInfo("Released the Bone Island BFO 5000 to normal held-item physics and saving.");
 		}
 
-		// The display is an owned item (sold) lying loose, so the game's ItemRigidbody.FixedUpdate destroys it once the camera
-		// is more than 600 m away, while Bone Island's scene can stay loaded much farther out. Without this the BFO 5000 was
-		// gone until the scene unloaded and loaded again. Queue the placement again: it waits for the camera within 500 m.
-		// On a scene unload the queued placement finds the scene gone and stops. The scene is the one it was placed in: the game's
-		// ShipItem.DestroyItem first calls ShipItem.ExitBoat, which parents the item to the world (another scene), so by now
-		// gameObject.scene is no longer Bone Island's (po-bfo-final2-s3: not placed again).
+		// The game's ItemRigidbody.FixedUpdate destroys a loose owned item more than 600 m from the camera, while Bone Island's
+		// scene stays loaded farther out: the placement is queued again (it waits for the camera within SafeSpawnDistance, and
+		// stops if the scene has unloaded). homeScene, not gameObject.scene: ShipItem.DestroyItem first parents the item to
+		// the world, which is in another scene.
 		private void OnDestroy()
 		{
 			if (this.released)
@@ -888,28 +885,22 @@ namespace PowerfulOar
 		}
 	}
 
+	// Shows the Huge Oar seller's line after a purchase. Disabled (no updates) until ShowPurchase, and again once the line
+	// is closed. Lives in the island's scene, so it unloads with it.
 	internal sealed class HugeOarPurchaseDialogueArea : MonoBehaviour
 	{
 		internal static HugeOarPurchaseDialogueArea Create(Transform source)
 		{
-			GameObject gameObject = new GameObject("PowerfulOar Huge Oar purchase dialogue trigger");
+			GameObject gameObject = new GameObject("PowerfulOar Huge Oar purchase dialogue");
 			HugeOarPurchaseDialogueArea result;
 			try
 			{
 				gameObject.SetActive(false);
 				SceneManager.MoveGameObjectToScene(gameObject, source.gameObject.scene);
-				gameObject.layer = 2;
 				gameObject.transform.position = source.position;
-				gameObject.transform.rotation = Quaternion.identity;
-				gameObject.transform.localScale = Vector3.one;
-				Rigidbody rigidbody = gameObject.AddComponent<Rigidbody>();
-				rigidbody.isKinematic = true;
-				rigidbody.useGravity = false;
-				SphereCollider sphereCollider = gameObject.AddComponent<SphereCollider>();
-				sphereCollider.radius = 4f;
-				sphereCollider.isTrigger = true;
 				HugeOarPurchaseDialogueArea hugeOarPurchaseDialogueArea = gameObject.AddComponent<HugeOarPurchaseDialogueArea>();
 				hugeOarPurchaseDialogueArea.source = source;
+				hugeOarPurchaseDialogueArea.enabled = false;
 				gameObject.SetActive(true);
 				result = hugeOarPurchaseDialogueArea;
 			}
@@ -925,7 +916,6 @@ namespace PowerfulOar
 		internal void ShowPurchase(string newContent)
 		{
 			this.content = newContent;
-			this.pending = true;
 			this.retry = 0f;
 			this.missingDialogueLogged = false;
 			HugeOarDialogue hugeOarDialogue = this.dialogue;
@@ -935,35 +925,18 @@ namespace PowerfulOar
 			}
 			this.dialogue = null;
 			float num = this.ObserverDistance();
-			this.open = (num <= 4f);
+			this.open = (num <= HugeOarPurchaseDialogueArea.OpenDistance);
+			base.enabled = true;
 		}
 
-		private void Awake()
-		{
-			this.body = base.GetComponent<Rigidbody>();
-			this.trigger = base.GetComponent<Collider>();
-		}
-
-		private void FixedUpdate()
+		private void Update()
 		{
 			if (this.source == null)
 			{
 				Object.Destroy(base.gameObject);
 				return;
 			}
-			this.trigger.enabled = this.source.gameObject.activeInHierarchy;
-			if (!this.trigger.enabled || GameState.currentlyLoading)
-			{
-				this.players.Clear();
-			}
-			this.body.position = this.source.position;
-			this.body.rotation = Quaternion.identity;
-		}
-
-		private void Update()
-		{
-			this.players.RemoveWhere((Collider player) => player == null || !player.gameObject.activeInHierarchy);
-			if (!this.pending || !this.Available())
+			if (!this.Available())
 			{
 				HugeOarDialogue hugeOarDialogue = this.dialogue;
 				if (hugeOarDialogue == null)
@@ -976,11 +949,11 @@ namespace PowerfulOar
 			else
 			{
 				float num = this.ObserverDistance();
-				if (!this.open && this.players.Count > 0 && num <= 4f)
+				if (!this.open && num <= HugeOarPurchaseDialogueArea.OpenDistance)
 				{
 					this.open = true;
 				}
-				if (this.open && num > 5f)
+				if (this.open && num > HugeOarPurchaseDialogueArea.CloseDistance)
 				{
 					this.ClosePurchase();
 					return;
@@ -1022,21 +995,6 @@ namespace PowerfulOar
 			}
 		}
 
-		private void OnTriggerEnter(Collider other)
-		{
-			this.Observe(other);
-		}
-
-		private void OnTriggerStay(Collider other)
-		{
-			this.Observe(other);
-		}
-
-		private void OnTriggerExit(Collider other)
-		{
-			this.players.Remove(other);
-		}
-
 		private void OnDisable()
 		{
 			HugeOarDialogue hugeOarDialogue = this.dialogue;
@@ -1057,14 +1015,6 @@ namespace PowerfulOar
 			this.dialogue = null;
 		}
 
-		private void Observe(Collider other)
-		{
-			if (other.CompareTag("Player"))
-			{
-				this.players.Add(other);
-			}
-		}
-
 		private bool Available()
 		{
 			return this.source != null && this.source.gameObject.activeInHierarchy && Refs.observerMirror != null && !GameState.currentlyLoading && !GameState.justStarted && !GameState.recovering && !GameState.sleeping;
@@ -1081,7 +1031,6 @@ namespace PowerfulOar
 
 		private void ClosePurchase()
 		{
-			this.pending = false;
 			this.open = false;
 			this.content = null;
 			HugeOarDialogue hugeOarDialogue = this.dialogue;
@@ -1090,27 +1039,20 @@ namespace PowerfulOar
 				hugeOarDialogue.Dispose();
 			}
 			this.dialogue = null;
+			base.enabled = false;
 		}
 
 		private const float OpenDistance = 4f;
 
 		private const float CloseDistance = 5f;
 
-		private readonly HashSet<Collider> players = new HashSet<Collider>();
-
 		private Transform source;
-
-		private Rigidbody body;
-
-		private Collider trigger;
 
 		private HugeOarDialogue dialogue;
 
 		private string content;
 
 		private float retry;
-
-		private bool pending;
 
 		private bool open;
 
@@ -1123,7 +1065,7 @@ namespace PowerfulOar
 		[HarmonyPostfix]
 		private static void Postfix(Shopkeeper __instance, ShipItem item)
 		{
-			if (!HugeOarVendorPatch.IsTarget(__instance) || OarStats.GetPrefabIndex(item) != 603)
+			if (!HugeOarVendorPatch.IsTarget(__instance) || OarStats.GetPrefabIndex(item) != ScaledOarFactory.HugeOarPrefabIndex)
 			{
 				return;
 			}
@@ -1153,7 +1095,7 @@ namespace PowerfulOar
 		{
 			HugeOarPurchaseState.Reset();
 			string s;
-			if (GameState.modData == null || !GameState.modData.TryGetValue("DogEggz.PowerfulOar.HugeOarPurchases.v1", out s))
+			if (GameState.modData == null || !GameState.modData.TryGetValue(HugeOarPurchaseState.SaveKey, out s))
 			{
 				return;
 			}
@@ -1200,7 +1142,7 @@ namespace PowerfulOar
 			{
 				GameState.modData = new Dictionary<string, string>();
 			}
-			GameState.modData["DogEggz.PowerfulOar.HugeOarPurchases.v1"] = HugeOarPurchaseState.purchaseCount.ToString(CultureInfo.InvariantCulture);
+			GameState.modData[HugeOarPurchaseState.SaveKey] = HugeOarPurchaseState.purchaseCount.ToString(CultureInfo.InvariantCulture);
 		}
 
 		internal static void ClearBeforeLoad()
@@ -1211,7 +1153,7 @@ namespace PowerfulOar
 			{
 				return;
 			}
-			modData.Remove("DogEggz.PowerfulOar.HugeOarPurchases.v1");
+			modData.Remove(HugeOarPurchaseState.SaveKey);
 		}
 
 		private const string SaveKey = "DogEggz.PowerfulOar.HugeOarPurchases.v1";
