@@ -86,7 +86,7 @@ namespace PowerfulOar
 				}
 				return false;
 			}
-			OarStats.Apply(component);
+			OarStats.VanillaRowForce = component.rowForce;
 			ScaledOarFactory.EnsureDirectoryCapacity(directory);
 			bool flag = true;
 			foreach (ScaledOarDefinition definition in ScaledOarFactory.Definitions)
@@ -790,24 +790,21 @@ namespace PowerfulOar
 
 	internal static class OarStats
 	{
+		// The game's oar 168 keeps its own force and speed limit; a scaled oar rows with a multiple of 168's force.
 		internal static bool Apply(ShipItemOar oar)
 		{
 			switch (OarStats.GetPrefabIndex(oar))
 			{
-			case ScaledOarFactory.VanillaOarPrefabIndex:
-				oar.rowForce = OarStats.OriginalForce;
-				oar.maxBoatSpeed = OarStats.OriginalMaxBoatSpeed;
-				return true;
 			case ScaledOarFactory.BigOarPrefabIndex:
-				oar.rowForce = OarStats.BigForce;
+				oar.rowForce = OarStats.VanillaRowForce * OarStats.BigForceMultiplier;
 				oar.maxBoatSpeed = OarStats.BigMaxBoatSpeed;
 				return true;
 			case ScaledOarFactory.HugeOarPrefabIndex:
-				oar.rowForce = OarStats.HugeForce;
+				oar.rowForce = OarStats.VanillaRowForce * OarStats.HugeForceMultiplier;
 				oar.maxBoatSpeed = OarStats.HugeMaxBoatSpeed;
 				return true;
 			case ScaledOarFactory.Bfo5000PrefabIndex:
-				oar.rowForce = OarStats.Bfo5000Force;
+				oar.rowForce = OarStats.VanillaRowForce * OarStats.Bfo5000ForceMultiplier;
 				oar.maxBoatSpeed = OarStats.Bfo5000MaxBoatSpeed;
 				return true;
 			default:
@@ -864,25 +861,24 @@ namespace PowerfulOar
 			return prefabIndex == ScaledOarFactory.BigOarPrefabIndex || prefabIndex == ScaledOarFactory.HugeOarPrefabIndex || prefabIndex == ScaledOarFactory.Bfo5000PrefabIndex;
 		}
 
-		internal const float OriginalForce = 36000f;
-
-		internal const float OriginalMaxBoatSpeed = 2.06f;
+		// Prefab 168's rowForce, read when the scaled oars register.
+		internal static float VanillaRowForce;
 
 		internal const float OriginalNeedsCostPerSecond = 0.1f;
 
-		internal const float BigForce = 93500f;
+		internal const float BigForceMultiplier = 2f;
 
 		internal const float BigMaxBoatSpeed = 3.1f;
 
 		internal const float BigNeedsCostPerSecond = 0.2f;
 
-		internal const float HugeForce = 204000f;
+		internal const float HugeForceMultiplier = 5f;
 
 		internal const float HugeMaxBoatSpeed = 5.14f;
 
 		internal const float HugeNeedsCostPerSecond = 0.3f;
 
-		internal const float Bfo5000Force = 510000f;
+		internal const float Bfo5000ForceMultiplier = 12f;
 
 		internal const float Bfo5000MaxBoatSpeed = 10.29f;
 

@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using System;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInEx;
@@ -30,7 +31,8 @@ namespace PowerfulOar
 			PowerfulOarPlugin.LogSource = base.Logger;
 			this.harmony = new Harmony(PowerfulOarPlugin.PluginGuid);
 			RadRefinementCompatibility.Initialize(this.harmony);
-			bool flag = this.ApplyPatchClass(typeof(OarStatsPatch), typeof(ShipItemOar), "OnAltHeld", null);
+			HookHangMoreCompatibility.Initialize();
+			bool flag =this.ApplyPatchClass(typeof(OarStatsPatch), typeof(ShipItemOar), "OnAltHeld", null);
 			bool flag2 = this.ApplyPatchClass(typeof(OarLateUpdatePatch), typeof(ShipItemOar), "ExtraLateUpdate", null);
 			bool flag3 = this.ApplyPatchGroup("runtime_lifecycle", new PowerfulOarPlugin.PatchTarget[]
 			{
@@ -97,7 +99,7 @@ namespace PowerfulOar
 			}
 			base.Logger.LogInfo(string.Concat(new string[]
 			{
-				"PowerfulOar " + PowerfulOarPlugin.PluginVersion + " loaded. Fixed per-oar stats and needs costs enabled. Hold Q to row opposite vanilla. Bone Island BFO placement, scaled-oar vendor displays, and Kicia Bay Huge Oar enabled. ",
+				"PowerfulOar " + PowerfulOarPlugin.PluginVersion + " loaded. Per-oar stats and needs costs enabled. Hold Q to row opposite vanilla. Bone Island BFO placement, scaled-oar vendor displays, and Kicia Bay Huge Oar enabled. ",
 				string.Format("Patches: stats={0}, late update={1}, ", flag, flag2),
 				string.Format("prefab={0}, outline wake fix={1}, ", flag4, flag5),
 				string.Format("reverse input={0}, nailing={1}, ", flag6, flag7),
@@ -109,6 +111,18 @@ namespace PowerfulOar
 				string.Format("RadRefinement needs={0}, ", RadRefinementCompatibility.NeedsReductionEnabled),
 				string.Format("continual row={0}.", RadRefinementCompatibility.ContinualRowAvailable)
 			}));
+		}
+
+		// A type from another plugin's own assembly, or null when that plugin is not loaded. A soft dependency loads before this
+		// plugin, so its PluginInfo already holds its instance in Awake.
+		internal static Type FindPluginType(string pluginGuid, string typeName)
+		{
+			PluginInfo pluginInfo;
+			if (!Chainloader.PluginInfos.TryGetValue(pluginGuid, out pluginInfo) || pluginInfo.Instance == null)
+			{
+				return null;
+			}
+			return pluginInfo.Instance.GetType().Assembly.GetType(typeName, false);
 		}
 
 		private bool ApplyPatchClass(Type patchType, Type targetType, string targetMethodName, Type[] argumentTypes = null)
@@ -206,7 +220,7 @@ namespace PowerfulOar
 
 		public const string PluginName = "PowerfulOar";
 
-		public const string PluginVersion = "1.1.3";
+		public const string PluginVersion = "1.1.4";
 
 		internal const string GoPointerInputLoopMethod = "LateUpdate";
 
@@ -280,7 +294,7 @@ namespace PowerfulOar
 			RadRefinementCompatibility.continualRow = null;
 			RadRefinementCompatibility.needsReductionEnabled = false;
 			RadRefinementCompatibility.continualRowAvailable = false;
-			Type type = AccessTools.TypeByName(RadRefinementCompatibility.ConfigsTypeName);
+			Type type = PowerfulOarPlugin.FindPluginType(RadRefinementCompatibility.PluginGuid, RadRefinementCompatibility.ConfigsTypeName);
 			if (type == null)
 			{
 				return;
@@ -477,7 +491,7 @@ namespace PowerfulOar
 					logSource.LogInfo("Disabled vanilla hook hanging for " + item.name + ".");
 				}
 			}
-			Type type = HookHangMoreCompatibility.AttachableItemType;
+			Type type = HookHangMoreCompatibility.attachableItemType;
 			Component component2 = (type != null) ? item.GetComponent(type) : null;
 			if (component2 == null)
 			{
@@ -504,20 +518,9 @@ namespace PowerfulOar
 			logSource2.LogInfo("Removed HooksHangMore attachment support from " + item.name + ".");
 		}
 
-		// Looked up once: AccessTools.TypeByName searches every type of every loaded assembly (milliseconds a call, and a
-		// HarmonyX warning when the type is missing). The first call comes from PrefabsDirectory.Start, after every plugin has
-		// loaded.
-		private static Type AttachableItemType
+		internal static void Initialize()
 		{
-			get
-			{
-				if (!HookHangMoreCompatibility.attachableItemTypeResolved)
-				{
-					HookHangMoreCompatibility.attachableItemType = AccessTools.TypeByName(HookHangMoreCompatibility.AttachableItemTypeName);
-					HookHangMoreCompatibility.attachableItemTypeResolved = true;
-				}
-				return HookHangMoreCompatibility.attachableItemType;
-			}
+			HookHangMoreCompatibility.attachableItemType = PowerfulOarPlugin.FindPluginType(HookHangMoreCompatibility.PluginGuid, HookHangMoreCompatibility.AttachableItemTypeName);
 		}
 
 		internal const string PluginGuid = "com.raddude.hookshangmore";
@@ -525,8 +528,6 @@ namespace PowerfulOar
 		private const string AttachableItemTypeName = "HooksHangMore.AttachableItem";
 
 		private static Type attachableItemType;
-
-		private static bool attachableItemTypeResolved;
 	}
 
 	[HarmonyPatch(typeof(ShipItem), "Awake")]
