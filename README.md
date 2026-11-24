@@ -1,12 +1,10 @@
 # PowerfulOar
 - Add reverse paddling (Press Q), so you can paddle forward while looking forward.
-- Vanilla oar increase force slighty, increase speed limit to 4 knots
-  - In game max speed will be around 3 knots on small boat.
-  - Food/water consumption reduce to 25% of vanilla
-- Add Big Oar. Sold in all 3 main city. 2.75x vanilla force. Speed limit 6 knots.
+- Vanilla oar reduce food/water consumption reduce to 25%.
+- Add Big Oar. Sold in all 3 main city. 2x vanilla force. Speed limit 6 knots.
   - In game max speed will be around 4-5 knots on medium boat.
   - Food/Water consumption reduce to 50% of vanilla
-- Add Huge oar. Sold in Kicia Bay at furniture vendor. 6x vanilla force. Speed limit 10 knots.
+- Add Huge oar. Sold in Kicia Bay at furniture vendor. 4x vanilla force. Speed limit 10 knots.
   - In game max speed will be around 6 knots for Brig/Jong.
   - Food/Water consumption reduce to 75% of vanilla.
 - Add BFO 5000, a really big oar. You can find it at bone island.
